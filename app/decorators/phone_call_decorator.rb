@@ -3,11 +3,13 @@ class PhoneCallDecorator < SimpleDelegator
 
   TWILIO_CALL_STATUS_MAPPINGS = {
     "queued" => "queued",
+    "initiating" => "queued",
     "initiated" => "queued",
     "ringing" => "ringing",
     "answered" => "in-progress",
     "busy" => "busy",
     "failed" => "failed",
+    "session_timeout" => "failed",
     "not_answered" => "no-answer",
     "completed" => "completed",
     "canceled" => "canceled"
@@ -15,27 +17,44 @@ class PhoneCallDecorator < SimpleDelegator
 
   TWILIO_CALL_DIRECTIONS = {
     "inbound" => "inbound",
-    "outbound" => "outbound-api"
+    "outbound_api" => "outbound-api",
+    "outbound_dial" => "outbound-dial"
   }.freeze
 
-  def self.model_name
-    ActiveModel::Name.new(self, nil, "PhoneCall")
-  end
+  class << self
+    delegate :model_name, :human_attribute_name, to: :PhoneCall
 
-  def self.human_attribute_name(*args)
-    PhoneCall.human_attribute_name(*args)
+    def statuses
+      TWILIO_CALL_STATUS_MAPPINGS.values.uniq
+    end
+
+    def directions
+      TWILIO_CALL_DIRECTIONS.values.uniq
+    end
+
+    def status_from(twilio_status)
+      TWILIO_CALL_STATUS_MAPPINGS.select { |_k, v| v == twilio_status }.keys.uniq
+    end
+
+    def direction_from(twilio_status)
+      TWILIO_CALL_DIRECTIONS.select { |_k, v| v == twilio_status }.keys.uniq
+    end
   end
 
   def from
-    format_number(super, spaces: "")
+    phone_number_formatter.format(super, format: :e164)
   end
 
   def to
-    format_number(super, spaces: "")
+    phone_number_formatter.format(super, format: :e164)
   end
 
   def sid
     id
+  end
+
+  def carrier_sid
+    carrier_id
   end
 
   def account_sid
@@ -43,7 +62,7 @@ class PhoneCallDecorator < SimpleDelegator
   end
 
   def phone_number_sid
-    phone_number_id
+    incoming_phone_number_id
   end
 
   def direction
@@ -59,30 +78,40 @@ class PhoneCallDecorator < SimpleDelegator
   end
 
   def to_formatted
-    format_number(__getobj__.to, format: :international)
+    phone_number_formatter.format(object.to, format: :international)
   end
 
   def from_formatted
-    format_number(__getobj__.from, format: :international)
+    phone_number_formatter.format(object.from, format: :international)
   end
 
-  def price_formatted
-    return if price.blank?
-
-    ActiveSupport::NumberHelper.number_to_currency(
-      __getobj__.price,
-      unit: Money::Currency.new(__getobj__.price_unit).symbol,
-      precision: 6
-    )
+  def price_formatted(**)
+    price_formatter.format(object.price, **)
   end
 
   def call_data_record
-    __getobj__.call_data_record || NullCallDataRecord.new
+    object.call_data_record || NullCallDataRecord.new
   end
 
-  def format_number(value, options = {})
-    return value unless Phony.plausible?(value)
+  def incoming_phone_number
+    object.incoming_phone_number&.decorated
+  end
 
-    Phony.format(value, options)
+  def phone_call
+    object
+  end
+
+  private
+
+  def phone_number_formatter
+    @phone_number_formatter ||= PhoneNumberFormatter.new
+  end
+
+  def price_formatter
+    @price_formatter ||= PriceFormatter.new
+  end
+
+  def object
+    __getobj__
   end
 end

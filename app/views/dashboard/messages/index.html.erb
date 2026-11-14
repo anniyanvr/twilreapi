@@ -1,0 +1,32 @@
+<%= page_title(title: "Messages") do %>
+  <%= render("shared/filters") do |form| %>
+    <%= form.text_field_tag(:id, params.dig(:filter, :id), title: "SID") %>
+
+    <% if policy(:account).show? %>
+      <%= form.select(
+          :account_id,
+          current_carrier.accounts.map { |account| [account.name, account.id] },
+          { filter_value: params.dig(:filter, :account_id) },
+          { data: { controller: "enhanced-select" }}
+        )
+      %>
+    <% end %>
+
+    <%= form.select :status, MessageDecorator.statuses.map { |s| [s.humanize, s] }, { filter_value: params.dig(:filter, :status) } %>
+    <%= form.text_field_tag(:to, params.dig(:filter, :to)) %>
+    <%= form.text_field_tag(:from, params.dig(:filter, :from)) %>
+    <%= form.date_range(
+      title: "Created At",
+      filter_value: [params.dig(:filter, :from_date), params.dig(:filter, :to_date)],
+      restrict_date_range: true
+    ) %>
+  <% end %>
+
+  <%= render("shared/export_action", disabled_title: "Filter by date to export", disabled: params.dig(:filter, :from_date).blank?, export_params: { resource_type: "Message" }) %>
+<% end %>
+
+<div class="card-body">
+  <%= render "collection", resources: @resources %>
+
+  <%= render "shared/pagination", resources: @resources %>
+</div>

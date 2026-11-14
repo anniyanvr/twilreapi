@@ -1,51 +1,210 @@
-<div class="c-sidebar c-sidebar-dark c-sidebar-fixed c-sidebar-lg-show" id="sidebar">
-  <div class="c-sidebar-brand">
+<div class="sidebar sidebar-fixed" id="sidebar" data-sidebar-target="sidebar">
+  <div class="sidebar-brand">
     <%= link_to dashboard_root_path do %>
-      <%= image_tag("logo.png", class: "c-sidebar-brand-full", height: 46) %>
-      <%= image_tag("logo_square.png", class: "c-sidebar-brand-minimized", height: 46) %>
+      <%= carrier_logo(current_carrier, class: "sidebar-brand-full", height: 46) %>
     <% end %>
   </div>
-  <ul class="c-sidebar-nav">
+  <ul class="sidebar-nav" data-simplebar>
+    <% if policy(:broadcast).index? %>
+      <%= sidebar_nav("Broadcasts", dashboard_broadcasts_path, icon_class: "fa-solid fa-bullhorn") %>
+    <% end %>
+
     <% if policy(:account_settings).show? %>
-      <%= sidebar_nav("Account Settings", dashboard_account_settings_path, icon_class: "fas fa-cloud") %>
+      <%= sidebar_nav("Account Settings", dashboard_account_settings_path, icon_class: "fa-solid fa-gear") %>
     <% end %>
 
     <% if policy(:carrier_settings).show? %>
-      <%= sidebar_nav("Carrier Settings", dashboard_carrier_settings_path, icon_class: "fas fa-broadcast-tower") %>
+      <%= sidebar_nav("Carrier Settings", dashboard_carrier_settings_path, icon_class: "fa-solid fa-gear") %>
     <% end %>
 
     <% if policy(:account).index? %>
-      <%= sidebar_nav("Accounts", dashboard_accounts_path, icon_class: "fas fa-cloud") %>
+      <%= sidebar_nav("Accounts", dashboard_accounts_path, icon_class: "fa-solid fa-cloud") %>
     <% end %>
 
-    <% if policy(:inbound_sip_trunk).index? %>
-      <%= sidebar_nav("Inbound SIP Trunks", dashboard_inbound_sip_trunks_path, icon_class: "fas fa-sort-amount-down") %>
+    <li class="nav-group" data-coreui="navigation">
+      <a class="nav-link nav-group-toggle" href="#" data-turbo="false">
+        <i class="nav-icon fa-solid fa-hashtag"></i> Phone Numbers
+      </a>
+
+      <ul class="nav-group-items">
+        <% if policy(:phone_number).index? %>
+          <%= sidebar_nav("Inventory", dashboard_phone_numbers_path, icon_class: "fa-solid fa-warehouse") %>
+        <% end %>
+
+        <% if policy(:phone_number_plan).index? %>
+          <%= sidebar_nav("Plans", dashboard_phone_number_plans_path, icon_class: "fa-solid fa-receipt") %>
+        <% end %>
+
+        <% if policy(:incoming_phone_number).index? %>
+          <%= sidebar_nav("Active Numbers", dashboard_incoming_phone_numbers_path(filter: { status: :active }), icon_class: "fa-solid fa-check-double") %>
+          <%= sidebar_nav("Released Numbers", dashboard_incoming_phone_numbers_path(filter: { status: :released }), icon_class: "fa-solid fa-ban") %>
+        <% end %>
+
+        <% if policy(:available_phone_number).index? %>
+          <%= sidebar_nav("Available Numbers", dashboard_available_phone_numbers_path, icon_class: "fa-solid fa-tag") %>
+        <% end %>
+
+        <% if policy(:alphanumeric_sender_id).index? %>
+          <%= sidebar_nav("Alphanumeric Sender IDs", dashboard_alphanumeric_sender_ids_path, icon_class: "fa-solid fa-spell-check") %>
+        <% end %>
+      </ul>
+    </li>
+
+    <% if %i[sip_trunk phone_call tts_events].any? { |r| policy(r).index? } %>
+      <li class="nav-group" data-coreui="navigation">
+        <a class="nav-link nav-group-toggle" href="#" data-turbo="false">
+          <i class="nav-icon fa-solid fa-mobile-retro"></i> Voice
+        </a>
+
+        <ul class="nav-group-items">
+          <% if policy(:phone_call).index? %>
+            <%= sidebar_nav("Phone Calls", dashboard_phone_calls_path, icon_class: "fa-solid fa-phone") %>
+          <% end %>
+
+          <% if policy(:sip_trunk).index? %>
+            <%= sidebar_nav("SIP Trunks", dashboard_sip_trunks_path, icon_class: "fa-solid fa-tower-cell") %>
+          <% end %>
+
+          <% if policy(:tts_event).index? %>
+            <%= sidebar_nav("TTS Events", dashboard_tts_events_path, icon_class: "fa-solid fa-font") %>
+          <% end %>
+        </ul>
+      </li>
     <% end %>
 
-    <% if policy(:outbound_sip_trunk).index? %>
-      <%= sidebar_nav("Outbound SIP Trunks", dashboard_outbound_sip_trunks_path, icon_class: "fas fa-sort-amount-up") %>
+    <% if %i[sms_gateway sms_gateway_channel_group message messaging_service].any? { |r| policy(r).index? } %>
+      <li class="nav-group" data-coreui="navigation">
+        <a class="nav-link nav-group-toggle" href="#" data-turbo="false">
+          <i class="nav-icon fa-solid fa-comment"></i> Messaging
+        </a>
+
+        <ul class="nav-group-items">
+
+          <% if policy(:message).index? %>
+            <%= sidebar_nav("Messages", dashboard_messages_path, icon_class: "fa-solid fa-comment-dots") %>
+          <% end %>
+
+          <% if policy(:sms_gateway).index? %>
+            <%= sidebar_nav("SMS Gateways", dashboard_sms_gateways_path, icon_class: "fa-solid fa-tower-broadcast") %>
+          <% end %>
+
+          <% if policy(:sms_gateway_channel_group).index? %>
+            <%= sidebar_nav("Channel Groups", dashboard_sms_gateway_channel_groups_path, icon_class: "fa-solid fa-object-group") %>
+          <% end %>
+
+          <% if policy(:messaging_service).index? %>
+            <%= sidebar_nav("Messaging Services", dashboard_messaging_services_path, icon_class: "fa-solid fa-rectangle-list") %>
+          <% end %>
+        </ul>
+      </li>
     <% end %>
 
-    <% if policy(:phone_number).index? %>
-      <%= sidebar_nav("Phone Numbers", dashboard_phone_numbers_path, icon_class: "fas fa-hashtag") %>
+    <% if %i[verification_service verification].any? { |r| policy(r).index? } %>
+      <li class="nav-group" data-coreui="navigation">
+        <a class="nav-link nav-group-toggle" href="#" data-turbo="false">
+          <i class="nav-icon fa-solid fa-clipboard-check"></i> Verify
+        </a>
+
+        <ul class="nav-group-items">
+          <% if policy(:verification_service).index? %>
+            <%= sidebar_nav("Services", dashboard_verification_services_path, icon_class: "fa-solid fa-list-check") %>
+          <% end %>
+
+          <% if policy(:verification).index? %>
+            <%= sidebar_nav("Verifications", dashboard_verifications_path, icon_class: "fa-regular fa-circle-check") %>
+          <% end %>
+        </ul>
+      </li>
     <% end %>
 
-    <% if policy(:phone_call).index? %>
-      <%= sidebar_nav("Phone Calls", dashboard_phone_calls_path, icon_class: "fas fa-phone") %>
-    <% end %>
-
-    <% if policy(:user).index? %>
-      <%= sidebar_nav("Users", dashboard_users_path, icon_class: "fas fa-users") %>
+    <% if policy(:carrier_user).index? %>
+      <%= sidebar_nav("Team", dashboard_carrier_users_path, icon_class: "fa-solid fa-people-group") %>
     <% end %>
 
     <% if policy(:account_membership).index? %>
-      <%= sidebar_nav("Users", dashboard_account_memberships_path, icon_class: "fas fa-users") %>
+      <%= sidebar_nav("Team", dashboard_account_memberships_path, icon_class: "fa-solid fa-people-group") %>
+    <% end %>
+
+    <% if %i[balance_transaction tariff_package tariff_plan tariff_schedule destination_group].any? { |r| policy(r).index? } %>
+      <li class="nav-group" data-coreui="navigation">
+        <a class="nav-link nav-group-toggle" href="#" data-turbo="false">
+          <i class="nav-icon fa-solid fa-money-check-dollar"></i> Billing
+        </a>
+
+        <ul class="nav-group-items">
+          <% if policy(:balance_transaction).index? %>
+            <%= sidebar_nav("Balance Transactions", dashboard_balance_transactions_path, icon_class: "fa-solid fa-money-check-dollar") %>
+          <% end %>
+
+          <% if policy(:tariff_package).index? %>
+            <%= sidebar_nav(
+              "Packages",
+              dashboard_tariff_packages_path,
+              active_when: [ new_dashboard_tariff_package_wizard_path ],
+              icon_class: "fa-solid fa-boxes-packing"
+            ) %>
+          <% end %>
+
+          <% if policy(:tariff_plan).index? %>
+            <%= sidebar_nav("Plans", dashboard_tariff_plans_path, icon_class: "fa-solid fa-receipt") %>
+          <% end %>
+
+          <% if policy(:tariff_schedule).index? %>
+            <%= sidebar_nav("Schedules", dashboard_tariff_schedules_path, icon_class: "fa-solid fa-table-columns") %>
+          <% end %>
+
+          <% if policy(:destination_group).index? %>
+            <%= sidebar_nav("Destination Groups", dashboard_destination_groups_path, icon_class: "fa-solid fa-1") %>
+          <% end %>
+        </ul>
+      </li>
+    <% end %>
+
+    <li class="nav-item"><hr/></li>
+
+    <% if policy(:import).index? %>
+      <%= sidebar_nav("Imports", dashboard_imports_path, icon_class: "fa-solid fa-file-upload") %>
     <% end %>
 
     <% if policy(:export).index? %>
-      <li class="c-sidebar-nav-item"><hr/></li>
+      <%= sidebar_nav("Exports", dashboard_exports_path, icon_class: "fa-solid fa-file-download") %>
+    <% end %>
 
-      <%= sidebar_nav("Exports", dashboard_exports_path, icon_class: "fas fa-file-download") %>
+    <li class="nav-item"><hr/></li>
+
+    <% if current_user.carrier_user? %>
+      <li class="nav-group" data-coreui="navigation">
+        <a class="nav-link nav-group-toggle" href="#" data-turbo="false">
+          <i class="nav-icon fa-solid fa-book"></i> Documentation
+        </a>
+
+        <ul class="nav-group-items">
+          <%= sidebar_nav("Carrier Docs", docs_path, icon_class: "fa-solid fa-arrow-up-right-from-square", link_options: { target: "_blank" }) %>
+          <%= sidebar_nav("Account API Docs", docs_twilio_api_path, icon_class: "fa-solid fa-arrow-up-right-from-square", link_options: { target: "_blank" }) %>
+        </ul>
+      </li>
+    <% else %>
+      <%= sidebar_nav("API Documentation", docs_twilio_api_path, icon_class: "fa-solid fa-arrow-up-right-from-square", link_options: { target: "_blank" }) %>
+    <% end %>
+
+    <% if current_user.carrier_user? %>
+      <li class="nav-group" data-coreui="navigation">
+        <a class="nav-link nav-group-toggle" href="#" data-turbo="false">
+          <i class="nav-icon fa-solid fa-laptop-code"></i> Developers
+        </a>
+
+        <ul class="nav-group-items">
+          <%= sidebar_nav("Error Logs", dashboard_error_logs_path, icon_class: "fa-solid fa-bug") %>
+          <%= sidebar_nav("Events", dashboard_events_path, icon_class: "fa-solid fa-clock-rotate-left") %>
+          <%= sidebar_nav("Webhook Logs", dashboard_webhook_request_logs_path, icon_class: "fa-solid fa-satellite-dish") %>
+        </ul>
+      </li>
     <% end %>
   </ul>
+
+  <% if current_user.carrier_user? && current_carrier.restricted? %>
+    <div class="sidebar-footer">
+      <%= render "shared/restricted_carrier_usage" %>
+    </div>
+  <% end %>
 </div>

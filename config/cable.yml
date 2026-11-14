@@ -1,10 +1,11 @@
 development:
-  adapter: async
+  adapter: any_cable
 
 test:
   adapter: test
 
-production:
-  adapter: redis
-  url: <%= ENV.fetch("REDIS_URL") { "redis://localhost:6379/1" } %>
-  channel_prefix: somleng_production
+production: &production
+  adapter: any_cable
+
+staging:
+  <<: *production

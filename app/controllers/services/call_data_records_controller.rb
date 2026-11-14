@@ -1,7 +1,12 @@
 module Services
   class CallDataRecordsController < ServicesController
     def create
-      ProcessCDRJob.perform_later(request.request_parameters)
+      payload = Base64.encode64(
+        ActiveSupport::Gzip.compress(
+          request.raw_post
+        )
+      )
+      ProcessCDRJob.perform_later(payload)
       head(:no_content)
     end
   end

@@ -1,38 +1,77 @@
 <%= page_title(title: "Carrier Settings") do %>
-  <% if CarrierSettingsPolicy.new(pundit_user, @resource).edit? %>
+  <% if CarrierSettingsPolicy.new(current_user, @resource).edit? %>
     <%= render("shared/edit_resource_page_action", path: edit_dashboard_carrier_settings_path) %>
   <% end %>
 <% end %>
 
 <div class="card-body">
-  <%= show_for(@resource) do |f| %>
-    <%= f.attribute :name, value: @resource.name %>
-    <%= f.attribute :country do %>
-      <%= @resource.country.emoji_flag %>
-      <%= @resource.country.name %>
-    <% end %>
-    <%= f.attribute :api_key, label: "API Key" do %>
-      <%= mask_content(@resource.api_key) if @resource.api_key.present? %>
-    <% end %>
-
-    <% if @resource.webhooks_enabled? %>
-      <%= f.attribute :webhook_url, label: "Webhook URL" do %>
-        <code>
-          <%= @resource.webhook_endpoint.url %>
-        </code>
+  <%= page_sections_container do %>
+    <%= page_section("General") do %>
+      <%= show_for(@resource) do |f| %>
+        <%= f.attribute :name %>
+        <%= f.attribute :subdomain_host, label: "Subdomain" %>
+        <%= f.attribute :website do %>
+          <%= external_link_to(@resource.website, @resource.website, target: "_blank") %>
+        <% end %>
+        <%= f.attribute :logo do %>
+          <%= image_thumbnail(@resource.logo, title: "Logo") %>
+        <% end %>
+        <%= f.attribute :favicon do %>
+          <%= image_thumbnail(@resource.favicon, width: 32, title: "Favicon") %>
+        <% end %>
+        <%= f.attribute :country do %>
+          <%= @resource.country.emoji_flag %>
+          <%= @resource.country.iso_short_name %>
+        <% end %>
       <% end %>
     <% end %>
 
-    <% if @resource.webhooks_enabled? %>
-      <%= f.attribute :webhook_signing_secret do %>
-        <%= mask_content(@resource.webhook_endpoint.signing_secret) %>
+    <%= page_section("Billing") do %>
+      <%= show_for(@resource) do |f| %>
+        <%= f.attribute :billing_currency, value: @resource.billing_currency.name %>
+        <%= f.attribute :default_tariff_package, value: @resource.default_tariff_package&.name %>
       <% end %>
     <% end %>
 
-    <%= f.attribute :logo do %>
-      <%= image_thumbnail(@resource.logo) %>
+    <%= page_section("Custom Domain") do %>
+      <%= show_for(@resource) do |f| %>
+        <%= f.attribute :custom_app_host, label: "Dashboard host" %>
+        <%= f.attribute :custom_api_host, label: "API host" %>
+      <% end %>
     <% end %>
-    <%= f.attribute :created_at, value: local_time(@resource.created_at) %>
-    <%= f.attribute :updated_at, value: local_time(@resource.updated_at) %>
+
+    <%= page_section("Webhooks") do %>
+      <%= show_for(@resource) do |f| %>
+        <%= f.attribute :webhook_url, label: "Webhook URL" do %>
+          <% if @resource.webhooks_enabled? %>
+            <code>
+              <%= @resource.webhook_endpoint.url %>
+            </code>
+          <% end %>
+        <% end %>
+
+        <%= f.attribute :webhook_signing_secret do %>
+          <%= mask_content(@resource.webhook_endpoint.signing_secret) if @resource.webhooks_enabled? %>
+        <% end %>
+      <% end %>
+    <% end %>
+
+    <%= page_section("Developers") do %>
+      <%= show_for(@resource.decorated) do |f| %>
+        <% if policy(:carrier_api_key).index? %>
+          <%= f.attribute(:api_keys) do %>
+            <%= external_link_to(
+              "Manage",
+              dashboard_carrier_settings_api_keys_path(filter: { active: true }),
+              title: "Manage API keys"
+            ) %>
+          <% end %>
+        <% end %>
+
+        <%= f.attribute :api_allowed_ip_addresses do %>
+          <%= f.object.api_allowed_ip_addresses %>
+        <% end %>
+      <% end %>
+    <% end %>
   <% end %>
 </div>

@@ -5,3 +5,24 @@ en:
         update: "Update Account Settings"
       carrier_settings:
         update: "Update Carrier Settings"
+      custom_domain:
+        update: "Save Custom Domain"
+      sms_gateway_channel_group:
+        create: "Create Channel group"
+        update: "Update Channel group"
+      sms_gateway_channel:
+        create: "Create Channel"
+        update: "Update Channel"
+      messaging_service:
+        create: "Next"
+        update: "Save"
+      incoming_phone_number:
+        update: "Save"
+      notification_preferences:
+        update: "Save"
+      phone_number_plan:
+        create: "Buy Number"
+      tariff_calculation:
+        create: "Calculate Tariff"
+      alphanumeric_sender_id:
+        create: "Request"

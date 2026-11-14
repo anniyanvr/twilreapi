@@ -2,71 +2,101 @@ require "rails_helper"
 
 RSpec.describe OutboundCallJob do
   it "initiates an outbound call" do
+    account = create(:account)
+    phone_call = create(:phone_call, account:, region: "helium")
+    other_phone_call = create(:phone_call, account:)
+    account_queue = build_queue(account)
+    account_queue.enqueue(phone_call.id)
+    account_queue.enqueue(other_phone_call.id)
+
+    OutboundCallJob.perform_now(account, queue: account_queue)
+
+    expect(ExecuteWorkflowJob).to have_been_enqueued.exactly(1).times.with(InitiateOutboundCall.to_s, phone_call:)
+    expect(account_queue.peek).to eq(other_phone_call.id)
+  end
+
+  it "handles internal calls" do
+    phone_call = create(:phone_call, :internal)
+    account_queue = build_queue(phone_call.account)
+    account_queue.enqueue(phone_call.id)
+
+    OutboundCallJob.perform_now(phone_call.account, queue: account_queue)
+
+    expect(ExecuteWorkflowJob).to have_been_enqueued.exactly(1).times.with(InitiateOutboundCall.to_s, phone_call:)
+  end
+
+  it "applies rate limits" do
     carrier = create(:carrier)
-    outbound_sip_trunk = create(:outbound_sip_trunk, nat_supported: false, carrier: carrier)
+    account = create(:account, carrier:)
+    phone_call = create(:phone_call, account:)
+    account_queue = build_queue(account)
+    account_rate_limiter = build_rate_limiter(key: account.id, rate: 1, window_size: 10.seconds)
+    carrier_rate_limiter = build_rate_limiter(key: carrier.id, rate: 1, window_size: 10.seconds)
+    account_queue.enqueue(phone_call.id)
 
-    phone_call = create(
-      :phone_call,
-      :outbound,
-      :queued,
-      :routable,
-      carrier: carrier,
-      outbound_sip_trunk: outbound_sip_trunk,
-      to: "85516701721",
-      dial_string: "85516701721@sip.example.com",
-      from: "1294",
-      voice_url: "http://example.com/voice_url",
-      voice_method: "POST"
-    )
-    stub_switch_request(external_call_id: "123456789")
+    travel_to(Time.new(2025, 4, 18, 0, 0, 0)) do
+      9.times { account_rate_limiter.request! }
+      10.times { carrier_rate_limiter.request! }
 
-    OutboundCallJob.perform_now(phone_call)
+      OutboundCallJob.perform_now(
+        account,
+        queue: account_queue,
+        rate_limiters: [ account_rate_limiter, carrier_rate_limiter ]
+      )
 
-    expect(phone_call.external_id).to eq("123456789")
-    expect(phone_call.status).to eq("initiated")
-    expect(WebMock).to have_requested(:post, "https://ahn.somleng.org/calls").with(
-      body: {
-        sid: phone_call.id,
-        account_sid: phone_call.account.id,
-        account_auth_token: phone_call.account.auth_token,
-        direction: "outbound-api",
-        api_version: "2010-04-01",
-        voice_url: "http://example.com/voice_url",
-        voice_method: "POST",
-        twiml: nil,
-        to: "+85516701721",
-        from: "1294",
-        routing_instructions: {
-          dial_string: "85516701721@sip.example.com",
-          nat_supported: false
-        }
-      }
-    )
+      expect(OutboundCallJob).to have_been_enqueued.with(
+        account,
+        wait_until: 10.seconds.from_now
+      )
+    end
+
+    expect(account_queue.peek).to eq(phone_call.id)
   end
 
-  it "handles already canceled calls" do
-    phone_call = create(:phone_call, :outbound, :routable, :canceled, external_id: nil)
+  it "applies session limits" do
+    account = create(:account)
+    phone_call = create(:phone_call, account:, region: "hydrogen")
+    account_queue = build_queue(account)
+    account_queue.enqueue(phone_call.id)
+    account_session_limiter, global_session_limiter = build_session_limiters(account:, sessions: { hydrogen: 1 }, limit: 1)
 
-    OutboundCallJob.perform_now(phone_call)
+    travel_to(Time.current) do
+      OutboundCallJob.perform_now(account, queue: account_queue, session_limiters: [ account_session_limiter, global_session_limiter ])
 
-    expect(WebMock).not_to have_requested(:post, "https://ahn.somleng.org/calls")
+      expect(OutboundCallJob).to have_been_enqueued.with(
+        account,
+        wait_until: 10.seconds.from_now
+      )
+    end
+
+    expect(account_queue.peek).to eq(phone_call.id)
+    expect(account_session_limiter.session_count_for(:hydrogen, scope: account.id)).to eq(1)
+    expect(global_session_limiter.session_count_for(:hydrogen)).to eq(1)
   end
 
-  it "handles failed outbound calls" do
-    phone_call = create(:phone_call, :outbound, :queued, :routable)
-    stub_request(:post, "https://ahn.somleng.org/calls").to_return(status: 500)
-
-    expect {
-      OutboundCallJob.perform_now(phone_call)
-    }.to raise_error(OutboundCallJob::RetryJob)
-
-    expect(phone_call.status).to eq("queued")
-    expect(WebMock).to have_requested(:post, "https://ahn.somleng.org/calls")
+  def build_queue(account, **options)
+    UniqueFIFOQueue.new(key: "queue:#{account.id}:outbound_calls", **options)
   end
 
-  def stub_switch_request(external_call_id: "ext-id")
-    stub_request(
-      :post, "https://ahn.somleng.org/calls"
-    ).to_return(body: "{\"id\": \"#{external_call_id}\"}")
+  def build_rate_limiter(key:, **options)
+    options = {
+      rate: 1,
+      window_size: 10.seconds,
+      **options
+    }
+
+    RateLimiter.new(key: "#{key}:outbound_calls", **options)
+  end
+
+  def build_session_limiters(account:, sessions: {}, **)
+    session_limiters = [ AccountCallSessionLimiter.new(**), GlobalCallSessionLimiter.new(**) ]
+
+    sessions.each do |region, count|
+      session_limiters.each do |session_limiter|
+        count.times { session_limiter.add_session_to(region, scope: account.id) }
+      end
+    end
+
+    session_limiters
   end
 end

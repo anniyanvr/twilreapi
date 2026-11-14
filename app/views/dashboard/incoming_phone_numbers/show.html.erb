@@ -1,0 +1,102 @@
+<% incoming_phone_number = @resource.decorated %>
+
+<%= page_title(title: incoming_phone_number.number_formatted) do %>
+  <% if @resource.released? && policy(:available_phone_number).index? %>
+    <%= link_to(dashboard_available_phone_numbers_path(filter: { number: incoming_phone_number.number } ), class: "btn btn-outline-success", title: local_assigns.fetch(:title, "Repurchase")) do %>
+      <i class="fa-solid fa-tag"></i> Repurchase
+    <% end %>
+  <% end %>
+
+  <% if policy(@resource).edit? %>
+    <%= render("shared/edit_resource_page_action", title: "Configure", text: "Configure", path: edit_dashboard_incoming_phone_number_path(@resource)) %>
+  <% end %>
+
+  <% if policy(@resource).destroy? %>
+    <%= render("shared/destroy_resource_page_action", title: "Release", text: "Release", path: dashboard_incoming_phone_number_path(@resource)) %>
+  <% end %>
+<% end %>
+
+<div class="card-body">
+  <%= show_for(incoming_phone_number) do |f| %>
+    <%= page_sections_container do %>
+      <%= page_section("Properties") do %>
+        <%= f.attribute :id, label: "SID" do %>
+          <code>
+            <%= incoming_phone_number.id %>
+          </code>
+        <% end %>
+
+        <%= f.attribute :status do %>
+          <%= status_badge(incoming_phone_number.status.text, color: incoming_phone_number.status_color) %>
+        <% end %>
+
+        <%= f.attribute :number, value: incoming_phone_number.number_formatted %>
+        <%= f.attribute :friendly_name %>
+        <%= f.attribute :type, value: incoming_phone_number.type_formatted %>
+
+        <% if incoming_phone_number.country.present? %>
+          <%= f.attribute :country do %>
+            <%= incoming_phone_number.country.emoji_flag %>
+            <%= incoming_phone_number.country.iso_short_name %>
+          <% end %>
+        <% else %>
+          <%= f.attribute :country %>
+        <% end %>
+
+        <%= f.attribute :region, value: incoming_phone_number.region_name %>
+        <%= f.attribute :locality %>
+
+        <% if policy(:phone_number).show? %>
+          <%= f.association :phone_number, label: "Phone number" do |phone_number| %>
+            <%= external_link_to("Manage", dashboard_phone_number_path(phone_number))%>
+          <% end %>
+        <% end %>
+      <% end %>
+
+      <%= page_section("Billing") do %>
+        <% if policy(:phone_number_plan).show? %>
+          <%= f.association :phone_number_plan, label: "Plan" do |plan| %>
+            <%= external_link_to("View", dashboard_phone_number_plan_path(incoming_phone_number.phone_number_plan))%>
+          <% end %>
+        <% end %>
+
+        <%= f.association :phone_number_plan, label: "Monthly fee" do |plan| %>
+          <%= plan.amount.format %>
+        <% end %>
+
+        <%= f.association :phone_number_plan, label: "Status" do |plan| %>
+          <%= status_badge(plan.status.text, color: plan.status_color) %>
+        <% end %>
+      <% end %>
+
+      <% if incoming_phone_number.active? %>
+        <%= page_section("Voice") do %>
+          <%= f.attribute :voice_url %>
+          <%= f.attribute :voice_method %>
+          <%= f.attribute :status_callback_url %>
+          <%= f.attribute :status_callback_method %>
+
+          <% if policy(:phone_call).index? %>
+            <%= f.attribute(:phone_calls) do %>
+              <%= external_link_to("View", dashboard_phone_calls_path(filter: { phone_number_id: incoming_phone_number.id }), title: "View phone calls") %>
+            <% end %>
+          <% end %>
+        <% end %>
+
+        <%= page_section("Messaging") do %>
+          <%= f.attribute :sms_url %>
+          <%= f.attribute :sms_method %>
+          <%= f.association :messaging_service do |messaging_service| %>
+            <%= link_to(messaging_service.name, dashboard_messaging_service_path(messaging_service)) %>
+          <% end %>
+
+          <% if policy(:message).index? %>
+            <%= f.attribute(:messages) do %>
+              <%= external_link_to("View", dashboard_messages_path(filter: { phone_number_id: incoming_phone_number.id }), title: "View messages") %>
+            <% end %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>

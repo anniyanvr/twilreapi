@@ -4,17 +4,12 @@ module DashboardHelper
     "https://www.gravatar.com/avatar/#{user_email}?size=200"
   end
 
-  def page_title(title:, subtitle: nil, &block)
+  def page_title(title:, &block)
     content_for(:page_title, title)
 
-    content_tag(:div, class: "card-header") do
+    content_tag(:div, class: "card-header d-flex justify-content-between align-items-center") do
       content = "".html_safe
-      content += content_tag(:span, title, class: "h2")
-
-      if subtitle.present?
-        content += " "
-        content += content_tag(:small, subtitle)
-      end
+      content += content_tag(:h2, title, class: "card-title")
 
       if block_given?
         content += content_tag(:div, class: "card-header-actions") do
@@ -26,21 +21,51 @@ module DashboardHelper
     end
   end
 
-  def sidebar_nav(text, path, icon_class:)
-    content_tag(:li, class: "c-sidebar-nav-item") do
-      sidebar_nav_class = "c-sidebar-nav-link"
-      sidebar_nav_class += " c-active" if request.path == path
-      link_to(path, class: sidebar_nav_class) do
+  def page_sections_container(&)
+    tag.div(class: "d-flex flex-column gap-3") do
+      capture(&)
+    end
+  end
+
+  def page_section(title, actions: nil, **html_options, &)
+    tag.div(class: [ "card" ].concat(Array(html_options.delete(:class))), id: (title.parameterize unless title.respond_to?(:call)), **html_options) do
+      header_html = tag.div(class: "card-header d-flex justify-content-start align-items-center gap-1") do
+        title_html = title.respond_to?(:call) ? title.call : tag.h5(title)
+
+        if actions.present?
+          actions_html = tag.div(actions, class: "card-header-actions d-flex justify-content-end ms-auto")
+          safe_join([ title_html, actions_html ])
+        else
+          title_html
+        end
+      end
+
+      body_html = tag.div(class: "card-body") do
+        capture(&)
+      end
+
+      header_html + body_html
+    end
+  end
+
+  def sidebar_nav(text, path, active_when: [], icon_class:, link_options: {})
+    content_tag(:li, class: "nav-item") do
+      sidebar_nav_classes = [ "nav-link" ]
+      if request.path.start_with?(URI(path).path) || Array(active_when).any? { request.path.start_with?(URI(it).path) }
+        sidebar_nav_classes << "active"
+      end
+
+      link_to(path, class: sidebar_nav_classes, **link_options) do
         content = "".html_safe
-        content += content_tag(:i, nil, class: "c-sidebar-nav-icon #{icon_class}")
-        content + " " + text
+        content += tag.i(class: "nav-icon #{icon_class}")
+        content + text
       end
     end
   end
 
-  def external_link_to(text, *args)
-    link_to(*args) do
-      "".html_safe + text + " " + content_tag(:i, nil, class: "fas fa-external-link-alt")
+  def external_link_to(text, *)
+    link_to(*) do
+      "".html_safe + text + " " + content_tag(:i, nil, class: "fa-solid fa-external-link-alt")
     end
   end
 
@@ -75,29 +100,23 @@ module DashboardHelper
       content += " "
       content += content_tag(
         :button,
-        class: "btn btn-secondary btn-sm",
+        class: "btn btn-light btn-sm",
         title: "Reveal",
         data: {
           "action" => "masked-content#reveal",
           "masked-content-target" => "revealButton"
         }
       ) do
-        content_tag(:i, nil, class: "fas fa-eye")
+        content_tag(:i, nil, class: "fa-solid fa-eye")
       end
     end
   end
 
-  def local_time(time)
-    return if time.blank?
-
-    tag.time(time.utc.iso8601, data: { behavior: "local-time" })
-  end
-
-  def image_thumbnail(image)
+  def image_thumbnail(image, width: 100, title: nil)
     return unless image.attached?
 
     link_to(
-      image_tag(image, width: 100, class: "img-thumbnail"),
+      image_tag(image, width:, title:, class: "img-thumbnail"),
       url_for(image),
       target: "_blank",
       rel: "noopener"
@@ -110,5 +129,49 @@ module DashboardHelper
     end
 
     doc.to_xml(indent: 2)
+  end
+
+  def connection_status(sms_gateway)
+    content = "".html_safe
+    if sms_gateway.connected?
+      content << content_tag(:i, "", class: "fas fa-circle text-success")
+      content << " Connected "
+      content << content_tag(
+        :span,
+        "#{time_ago_in_words(sms_gateway.last_connected_at)} ago",
+        class: "text-muted small"
+      )
+    else
+      content << (content_tag(:i, "", class: "fas fa-circle text-danger") + " Disconnected")
+    end
+  end
+
+  def status_icon(color)
+    icon_class = color == :success ? "fa-circle-check" : "fa-triangle-exclamation"
+    tag.span(class: "text-#{color}") do
+      tag.i(class: "fa-solid #{icon_class}")
+    end
+  end
+
+  def status_badge(status, color:)
+    tag.span(class: "badge text-bg-#{color} text-white") do
+      status
+    end
+  end
+
+  def link_to_cancel(link_text = "Cancel", location = :back, **, &)
+    link_to(link_text, location, class: "btn btn-outline-danger", **, &)
+  end
+
+  def summarize_list(items, max: nil, link_to_remaining: nil)
+    return to_sentence(items) if max.blank? || items.size <= max
+
+    displayed = items.take(max)
+    remaining = items.size - max
+
+    remaining_text = "#{remaining} more"
+    remaining_text = link_to(remaining_text, link_to_remaining) if link_to_remaining.present?
+
+    to_sentence([ *displayed, remaining_text.html_safe ])
   end
 end

@@ -1,0 +1,226 @@
+require "rails_helper"
+
+RSpec.describe "Messaging Services" do
+  it "List and filter messaging services" do
+    carrier = create(:carrier)
+    account = create(:account, carrier:)
+    messaging_service = create(
+      :messaging_service,
+      account:,
+      carrier:,
+      name: "My Messaging Service"
+    )
+    alphanumeric_sender_id = create(:alphanumeric_sender_id, account:)
+    create(:messaging_service_alphanumeric_sender_id, messaging_service:, sender_id: alphanumeric_sender_id)
+    create(:messaging_service, account:, carrier:, name: "Foobar")
+    user = create(:user, :carrier, carrier:)
+
+    carrier_sign_in(user)
+    visit(
+      dashboard_messaging_services_path(
+        filter: {
+          name: "Messaging",
+          alphanumeric_sender_id_id: alphanumeric_sender_id.id
+        }
+      )
+    )
+
+    expect(page).to have_text("My Messaging Service")
+    expect(page).to have_no_text("Foobar")
+  end
+
+  it "Show a messaging service" do
+    messaging_service = create(:messaging_service, name: "My Messaging Service")
+    incoming_phone_number = create(
+      :incoming_phone_number,
+      messaging_service:,
+      number: "855715999999",
+      account: messaging_service.account
+    )
+    alphanumeric_sender_id = create(
+      :alphanumeric_sender_id,
+      :approved,
+      account: messaging_service.account,
+      sender_id: "MyBrand"
+    )
+    create(
+      :messaging_service_alphanumeric_sender_id,
+      messaging_service:,
+      sender_id: alphanumeric_sender_id
+    )
+    create(
+      :messaging_service_alphanumeric_sender_id,
+      messaging_service:,
+      sender_id: create(
+        :alphanumeric_sender_id,
+        :rejected,
+        account: messaging_service.account,
+        sender_id: "RejBrand"
+      ),
+      destination_country_code: "855"
+    )
+    user = create(:user, :carrier, carrier: messaging_service.carrier)
+
+    carrier_sign_in(user)
+    visit dashboard_messaging_service_path(messaging_service)
+
+    expect(page).to have_link(
+      "+855 71 599 9999",
+      href: dashboard_incoming_phone_number_path(incoming_phone_number)
+    )
+    expect(page).to have_link(
+      "MyBrand",
+      href: dashboard_alphanumeric_sender_id_path(alphanumeric_sender_id)
+    )
+    expect(page).to have_no_text("RejBrand")
+    expect(page).to have_text("My Messaging Service")
+  end
+
+  it "Create a messaging service", :js do
+    carrier = create(:carrier)
+    account = create(:account, carrier:, name: "Rocket Rides")
+    incoming_phone_numbers = [
+        create(
+        :incoming_phone_number,
+        account:,
+        number: "855715777777"
+      ),
+      create(
+        :incoming_phone_number,
+        account:,
+        number: "855715888888"
+      )
+    ]
+    alphanumeric_sender_id = create(
+      :alphanumeric_sender_id,
+      :approved,
+      account:,
+      sender_id: "RocketRides"
+    )
+
+    user = create(:user, :carrier, :admin, carrier:)
+    carrier_sign_in(user)
+    visit dashboard_messaging_services_path
+
+    click_on("New")
+    fill_in("Name", with: "My Messaging Service")
+    enhanced_select("Rocket Rides", from: "Account")
+    click_on("Next")
+
+    enhanced_select("+855 71 577 7777", "+855 71 588 8888", from: "Phone numbers")
+    enhanced_select("RocketRides", from: "Alphanumeric sender ID")
+    choose("Send a webhook")
+    fill_in("Inbound request URL", with: "https://www.example.com/message.xml")
+    enhanced_select("POST", from: "Inbound request method")
+    fill_in("Status callback URL", with: "https://www.example.com/status_callback.xml")
+    check("Smart encoding")
+
+    click_on("Save")
+
+    expect(page).to have_text("Messaging service was successfully updated")
+    expect(page).to have_text("My Messaging Service")
+    expect(page).to have_text("Rocket Rides")
+    expect(page).to have_link("+855 71 577 7777", href: dashboard_incoming_phone_number_path(incoming_phone_numbers[0]))
+    expect(page).to have_link("+855 71 588 8888", href: dashboard_incoming_phone_number_path(incoming_phone_numbers[1]))
+    expect(page).to have_link("RocketRides", href: dashboard_alphanumeric_sender_id_path(alphanumeric_sender_id))
+    expect(page).to have_text("https://www.example.com/message.xml")
+    expect(page).to have_text("https://www.example.com/status_callback.xml")
+    expect(page).to have_text("Webhook")
+  end
+
+  it "Create a messaging service as an account admin" do
+    carrier = create(:carrier)
+    account = create(:account, carrier:)
+    user = create(:user, :with_account_membership, account_role: :admin, account:)
+
+    carrier_sign_in(user)
+    visit new_dashboard_messaging_service_path
+
+    fill_in("Name", with: "My Messaging Service")
+    click_on("Next")
+    click_on("Save")
+
+    expect(page).to have_text("Messaging service was successfully updated")
+    expect(page).to have_text("My Messaging Service")
+  end
+
+  it "Handles validations" do
+    user = create(:user, :carrier, :admin)
+
+    carrier_sign_in(user)
+    visit new_dashboard_messaging_service_path
+    click_on "Next"
+
+    expect(page).to have_text("can't be blank")
+  end
+
+  it "Update a messaging service" do
+    messaging_service = create(:messaging_service, name: "Default")
+    alphanumeric_sender_id = create(
+      :alphanumeric_sender_id,
+      :approved,
+      account: messaging_service.account,
+      sender_id: "RocketRides"
+    )
+    create(:messaging_service_alphanumeric_sender_id, messaging_service:, sender_id: alphanumeric_sender_id)
+    create(
+      :incoming_phone_number,
+      messaging_service:,
+      account: messaging_service.account,
+      number: "855715777777"
+    )
+    create(
+      :incoming_phone_number,
+      account: messaging_service.account,
+      number: "855715888888"
+    )
+    user = create(:user, :carrier, :admin, carrier: messaging_service.carrier)
+    carrier_sign_in(user)
+
+    visit dashboard_messaging_service_path(messaging_service)
+    click_on("Edit")
+    expect(page).to have_enhanced_select("Alphanumeric sender ID", selected: "RocketRides")
+    fill_in("Name", with: "My Messaging Service")
+    enhanced_select("+855 71 577 7777", from: "Phone numbers")
+    enhanced_select("+855 71 588 8888", from: "Phone numbers")
+    enhanced_select("", from: "Alphanumeric sender ID")
+    fill_in("Inbound request URL", with: "https://www.example.com/message.xml")
+    select("POST", from: "Inbound request method")
+    fill_in("Status callback URL", with: "https://www.example.com/status_callback.xml")
+    check("Smart encoding")
+
+    click_on "Save"
+
+    expect(page).to have_text("Messaging service was successfully updated")
+    expect(page).to have_text("My Messaging Service")
+    expect(page).to have_link("+855 71 577 7777")
+    expect(page).to have_link("+855 71 588 8888")
+    expect(page).to have_text("https://www.example.com/message.xml")
+    expect(page).to have_text("https://www.example.com/status_callback.xml")
+    within("#smart-encoding") do
+      expect(page).to have_text("Yes")
+    end
+    within("#alphanumeric-sender-ids") do
+      expect(page).to have_text("Not specified")
+    end
+  end
+
+  it "Delete a messaging service" do
+    messaging_service = create(:messaging_service, name: "My Channel Group")
+    create(
+      :incoming_phone_number,
+      messaging_service:,
+      account: messaging_service.account,
+      number: "855715777777"
+    )
+    user = create(:user, :carrier, :admin, carrier: messaging_service.carrier)
+
+    carrier_sign_in(user)
+    visit dashboard_messaging_service_path(messaging_service)
+
+    click_on("Delete")
+
+    expect(page).to have_text("Messaging service was successfully destroyed")
+    expect(page).to have_no_text("My Channel Group")
+  end
+end

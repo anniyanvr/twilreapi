@@ -1,31 +1,66 @@
 class OutboundCallJob < ApplicationJob
-  class RetryJob < StandardError; end
+  class SessionLimitExceededError < StandardError; end
 
-  def perform(phone_call, call_service_client: CallService::Client.new)
-    return if phone_call.canceled?
+  queue_as AppSettings.fetch(:aws_sqs_outbound_calls_queue_name)
 
-    phone_call = PhoneCallDecorator.new(phone_call)
-    response = call_service_client.create_call(
-      sid: phone_call.sid,
-      account_sid: phone_call.account_sid,
-      account_auth_token: phone_call.account.auth_token,
-      direction: phone_call.direction,
-      api_version: TwilioAPISerializer::API_VERSION,
-      voice_url: phone_call.voice_url,
-      voice_method: phone_call.voice_method,
-      twiml: phone_call.twiml,
-      to: phone_call.to,
-      from: phone_call.from,
-      routing_instructions: {
-        dial_string: phone_call.dial_string,
-        nat_supported: phone_call.outbound_sip_trunk.nat_supported
-      }
-    )
+  class Handler
+    attr_reader :account, :queue, :rate_limiters, :session_limiters, :logger
 
-    # re-enqueue job with exponential backoff
-    raise RetryJob, "Response body: #{response.body}" unless response.success?
+    def initialize(account, **options)
+      @account = account
+      @logger = options.fetch(:logger) { Rails.logger }
+      @queue = options.fetch(:queue) { OutboundCallsQueue.new(account) }
+      @rate_limiters = options.fetch(:rate_limiters) { build_rate_limiters }
+      @session_limiters = options.fetch(:session_limiters) { [ AccountCallSessionLimiter.new(logger:), GlobalCallSessionLimiter.new(logger:) ] }
+    end
 
-    phone_call.external_id = response.fetch(:id)
-    phone_call.initiate!
+    def perform
+      queue.dequeue do |phone_call_id|
+        phone_call = PhoneCall.find(phone_call_id)
+
+        rate_limit!
+        session_limit!(phone_call)
+
+        ExecuteWorkflowJob.perform_later(InitiateOutboundCall.to_s, phone_call:)
+
+        phone_call.touch(:initiation_queued_at)
+      end
+    rescue RateLimiter::RateLimitExceededError => e
+      logger.warn("Rate limit exceeded for account: #{account.id}. Rescheduling in #{e.seconds_remaining_in_current_window} seconds.")
+      reschedule(wait_until: e.seconds_remaining_in_current_window.seconds.from_now)
+    rescue SessionLimitExceededError => e
+      logger.warn(e.message)
+      reschedule(wait_until: 10.seconds.from_now)
+    end
+
+    private
+
+    def rate_limit!
+      rate_limiters.each(&:request!)
+    end
+
+    def session_limit!(phone_call)
+      session_limiters.each do |limiter|
+        next unless limiter.exceeds_limit?(phone_call.region.alias, scope: phone_call.account_id)
+
+        raise SessionLimitExceededError, "Session limit exceeded for limiter: #{limiter.class} (Account ID: #{phone_call.account_id})"
+      end
+    end
+
+    def reschedule(wait_until:)
+      OutboundCallJob.perform_later(account, wait_until:)
+    end
+
+    def build_rate_limiters
+      [ account, account.carrier ].each_with_object([]) do |owner, result|
+        next if owner.calls_per_second.zero?
+
+        result << RateLimiter.new(key: "#{owner.id}:outbound_calls", rate: owner.calls_per_second, window_size: 10.seconds)
+      end
+    end
+  end
+
+  def perform(*, **options)
+    Handler.new(*, logger:, **options).perform
   end
 end

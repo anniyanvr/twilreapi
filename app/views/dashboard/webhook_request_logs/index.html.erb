@@ -1,0 +1,13 @@
+<%= page_title(title: "Webhook Logs") do %>
+  <%= render("shared/filters") do |form| %>
+    <%= form.text_field_tag(:event_id, params.dig(:filter, :event_id), title: "Event ID") %>
+    <%= form.boolean_select(:failed, { filter_value: params.dig(:filter, :failed) }) %>
+    <%= form.date_range title: "Created At", filter_value: [params.dig(:filter, :from_date), params.dig(:filter, :to_date)] %>
+  <% end %>
+<% end %>
+
+<div class="card-body">
+  <%= render "collection", resources: @resources %>
+
+  <%= render "shared/pagination", resources: @resources %>
+</div>

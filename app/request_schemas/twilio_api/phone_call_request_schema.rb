@@ -1,17 +1,22 @@
 module TwilioAPI
   class PhoneCallRequestSchema < TwilioAPIRequestSchema
-    URL_FORMAT = /\A#{URI::DEFAULT_PARSER.make_regexp(%w[http https])}\z/.freeze
+    option :phone_number_validator, default: -> { PhoneNumberValidator.new }
+    option :url_validator, default: -> { URLValidator.new(allow_http: true) }
+    option :twiml_validator, default: -> { TwiMLValidator.new }
+    option :phone_call_destination_schema_rules, default: -> { SchemaRules::PhoneCallDestinationSchemaRules.new }
+    option :phone_number_configuration_rules, default: -> { PhoneNumberConfigurationRules.new }
+    option :validate_from, default: -> { true }
 
     params do
-      required(:To).value(ApplicationRequestSchema::Types::PhoneNumber, :filled?)
-      required(:From).value(ApplicationRequestSchema::Types::PhoneNumber, :filled?)
-      optional(:Url).filled(:str?, format?: URL_FORMAT)
+      required(:To).value(ApplicationRequestSchema::Types::Number, :filled?)
+      required(:From).value(ApplicationRequestSchema::Types::Number, :filled?)
+      optional(:Url).filled(:str?)
       optional(:Method).value(
         ApplicationRequestSchema::Types::UppercaseString,
         :filled?,
         included_in?: PhoneCall.voice_method.values
       )
-      optional(:StatusCallback).filled(:string, format?: URL_FORMAT)
+      optional(:StatusCallback).filled(:string)
       optional(:StatusCallbackMethod).value(
         ApplicationRequestSchema::Types::UppercaseString,
         :filled?,
@@ -20,54 +25,74 @@ module TwilioAPI
       optional(:Twiml).filled(:str?)
     end
 
-    rule(:To).validate(:phone_number_format)
+    rule(:From) do |context:|
+      next unless validate_from
 
-    rule(:To) do |context:|
-      next if schema_error?(:To)
+      context[:incoming_phone_number] = account.incoming_phone_numbers.active.find_by(number: values[:From])
+      next if phone_number_configuration_rules.valid?(context[:incoming_phone_number])
 
-      destination_rules = DestinationRules.new(account: account, destination: value)
-      unless destination_rules.calling_code_allowed?
-        next base.failure(text: "Call blocked by block list", code: "13225")
-      end
-
-      context[:outbound_sip_trunk] = destination_rules.sip_trunk
-      if context[:outbound_sip_trunk].blank?
-        base.failure(
-          text: "Calling this number is unsupported or the number is invalid",
-          code: "13224"
-        )
-      end
+      base.failure(schema_helper.build_schema_error(:unverified_source_number))
     end
 
     rule(:Twiml) do
-      Nokogiri::XML(value) { |c| c.options = Nokogiri::XML::ParseOptions::STRICT } if key? && value.present?
-    rescue Nokogiri::XML::SyntaxError
+      next if value.blank?
+      next if twiml_validator.valid?(value)
+
       key.failure("is invalid")
     end
 
     rule(:Url, :Twiml) do
       key(:Url).failure("is required") unless key?(:Url) || key?(:Twiml)
+      next if values[:Url].blank?
+      next if url_validator.valid?(values[:Url])
+
+      key(:Url).failure("is invalid")
+    end
+
+    rule(:StatusCallback) do
+      next if value.blank?
+      next if url_validator.valid?(value)
+
+      key(:StatusCallback).failure("is invalid")
+    end
+
+    rule(:To) do |context:|
+      next unless key?
+      next key.failure("is invalid") unless phone_number_validator.valid?(value)
+      next if result.errors.any?
+
+      if phone_call_destination_schema_rules.valid?(account:, destination: value)
+        context[:sip_trunk] = phone_call_destination_schema_rules.sip_trunk
+      else
+        base.failure(schema_helper.build_schema_error(phone_call_destination_schema_rules.error_code))
+      end
     end
 
     def output
       params = super
 
+      sip_trunk = context.fetch(:sip_trunk)
+      originator_id_behavior = OriginatorIDBehavior.new(sip_trunk.caller_id_behavior)
+      from = params.fetch(:From)
+      originator_id = originator_id_behavior.resolve(client_id: from, managed_id: sip_trunk.caller_id)
+      originator_id = "+#{originator_id}" if originator_id == from && input_params.fetch(:From).starts_with?("+")
+
       {
-        account: account,
+        account:,
         carrier: account.carrier,
-        outbound_sip_trunk: context.fetch(:outbound_sip_trunk),
-        dial_string: DialString.new(
-          outbound_sip_trunk: context.fetch(:outbound_sip_trunk),
-          destination: params.fetch(:To)
-        ).to_s,
+        sip_trunk:,
+        region: sip_trunk.region,
         to: params.fetch(:To),
-        from: params.fetch(:From),
+        from:,
+        incoming_phone_number: context[:incoming_phone_number],
+        phone_number: context[:incoming_phone_number]&.phone_number,
+        caller_id: originator_id,
         voice_url: params[:Url],
         voice_method: params.fetch(:Method) { "POST" if params.key?(:Url) },
         status_callback_url: params[:StatusCallback],
         status_callback_method: params[:StatusCallbackMethod],
         twiml: (params[:Twiml] unless params.key?(:Url)),
-        direction: :outbound
+        direction: :outbound_api
       }
     end
   end

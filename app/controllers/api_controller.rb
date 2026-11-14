@@ -8,17 +8,23 @@ class APIController < ActionController::API
   def validate_request_schema(with:, **options, &_block)
     schema_options = options.delete(:schema_options) || {}
     input_params = options.delete(:input_params) || request.request_parameters
-    schema = with.new(input_params: input_params, options: schema_options)
-
+    schema = with.new(input_params:, options: schema_options)
     if schema.success?
       resource = yield(schema.output)
       respond_with_resource(resource, options)
     else
-      respond_with(schema, responder: InvalidRequestSchemaResponder, **options)
+      on_error = options.delete(:on_error)
+      on_error&.call(schema)
+
+      respond_with_errors(schema, **options)
     end
   end
 
-  def respond_with_resource(resource, options = {})
-    respond_with(resource, **options)
+  def respond_with_resource(resource, options = {}, &)
+    respond_with(resource, **options, &)
+  end
+
+  def respond_with_errors(object, **)
+    respond_with(object, responder: InvalidRequestSchemaResponder, **)
   end
 end

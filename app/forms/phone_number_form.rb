@@ -4,16 +4,40 @@ class PhoneNumberForm
 
   extend Enumerize
 
-  NUMBER_FORMAT = /\A\d+\z/.freeze
+  VISIBILITIES = {
+    private: "Private <div class='form-text'>Only available for private use within your organization.</div>",
+    public: "Public <div class='form-text'>Available for private use within your organization and purchasable by your customers.</div>",
+    disabled: "Disabled <div class='form-text'>Disable this phone number.</div>"
+  }.freeze
+
+  enumerize :visibility, in: PhoneNumber.visibility.values, default: :private
 
   attribute :carrier
-  attribute :number
-  attribute :account_id
+  attribute :number, PhoneNumberType.new
   attribute :phone_number, default: -> { PhoneNumber.new }
+  attribute :type
+  attribute :country
+  attribute :region
+  attribute :locality
+  attribute :lata
+  attribute :rate_center
+  attribute :latitude, :decimal, precision: 10
+  attribute :longitude, :decimal, precision: 10
+  attribute :price, :decimal, default: 0.0
+  attribute :visibility
+  attribute :account_id
 
-  validates :number, presence: true
-  validates :number, format: NUMBER_FORMAT, allow_nil: true, allow_blank: true
-  validate :validate_number
+  with_options if: :new_record? do
+    validates :number, presence: true
+    validates :number, format: PhoneNumber::NUMBER_FORMAT, allow_blank: true
+    validate :validate_number
+  end
+
+  validates :type, phone_number_type: true
+  validates :price, numericality: { greater_than_or_equal_to: 0 }
+  validates :country, phone_number_country: true, allow_blank: true
+  validates :region, country_subdivision: { country_attribute: :country, country_code: ->(record) { record.country } }, allow_blank: true
+  validates :lata, lata: true, allow_blank: true
 
   delegate :persisted?, :new_record?, :id, to: :phone_number
 
@@ -23,10 +47,19 @@ class PhoneNumberForm
 
   def self.initialize_with(phone_number)
     new(
-      phone_number: phone_number,
-      account_id: phone_number.account_id,
+      phone_number:,
       carrier: phone_number.carrier,
-      number: phone_number.number
+      number: phone_number.decorated.number_formatted,
+      country: phone_number.iso_country_code,
+      region: phone_number.iso_region_code,
+      locality: phone_number.locality,
+      lata: phone_number.lata,
+      rate_center: phone_number.rate_center,
+      latitude: phone_number.latitude,
+      longitude: phone_number.longitude,
+      type: phone_number.type,
+      price: phone_number.price,
+      visibility: phone_number.visibility
     )
   end
 
@@ -34,28 +67,60 @@ class PhoneNumberForm
     return false if invalid?
 
     phone_number.carrier = carrier
-    phone_number.number = number
-    phone_number.account = account_id.present? ? carrier.accounts.find(account_id) : nil
+    phone_number.number = number if new_record?
+    phone_number.visibility = visibility
+    phone_number.type = type
+    phone_number.iso_country_code = country if country.present?
+    phone_number.iso_region_code = region.presence
+    phone_number.locality = locality.presence
+    phone_number.lata = lata.presence
+    phone_number.rate_center = rate_center.to_s.upcase.presence
+    phone_number.latitude = latitude.presence
+    phone_number.longitude = longitude.presence
+    phone_number.price = Money.from_amount(price, carrier.billing_currency)
 
-    phone_number.save!
+    PhoneNumber.transaction do
+      phone_number.save!
+      create_plan!
+      phone_number
+    end
+  end
+
+  def possible_countries
+    return ISO3166::Country.all.map(&:alpha2) if new_record?
+
+    number.possible_countries.map(&:alpha2)
+  end
+
+  def visibility_options_for_select
+    VISIBILITIES.map { |k, v| [ v.html_safe, k ] }
   end
 
   def account_options_for_select
-    carrier.accounts.map do |account|
-      {
-        id: account.id,
-        text: account.name
-      }
-    end
+    accounts_scope.map { |account| [ account.name, account.id ] }
+  end
+
+  def create_plan!
+    return if account_id.blank?
+    account = accounts_scope.find(account_id)
+
+    CreatePhoneNumberPlan.call(
+      phone_number:,
+      account:,
+      amount: Money.from_amount(0, carrier.billing_currency)
+    )
   end
 
   private
 
   def validate_number
     return if errors[:number].any?
-    return if phone_number.number == number
-    return unless carrier.phone_numbers.exists?(number: number)
+    return unless carrier.phone_numbers.exists?(number:)
 
     errors.add(:number, :taken)
+  end
+
+  def accounts_scope
+    carrier.managed_accounts
   end
 end

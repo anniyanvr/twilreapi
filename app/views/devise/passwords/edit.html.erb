@@ -1,6 +1,8 @@
-<h2>Change your password</h2>
+<% content_for(:page_title) do %>
+  Change your password
+<% end %>
 
-<%= simple_form_for(resource, as: resource_name, url: password_path(resource_name), html: { method: :put }) do |f| %>
+<%= simple_form_for(resource, as: resource_name, url: password_path(resource_name), html: { method: :put, data: { turbo: false } }) do |f| %>
   <%= f.error_notification %>
 
   <%= f.input :reset_password_token, as: :hidden %>
@@ -12,6 +14,7 @@
               autofocus: true,
               hint: ("#{@minimum_password_length} characters minimum" if @minimum_password_length),
               input_html: { autocomplete: "new-password" } %>
+
   <%= f.input :password_confirmation,
               label: "Confirm your new password",
               required: true,

@@ -3,11 +3,11 @@ require "rails_helper"
 RSpec.describe "Accounts" do
   it "List and filter accounts", :js do
     carrier = create(:carrier)
-    user = create(:user, :carrier, carrier: carrier)
+    user = create(:user, :carrier, carrier:)
     create(
       :account,
       name: "Rocket Rides",
-      carrier: carrier,
+      carrier:,
       created_at: Time.utc(2021, 12, 1),
       metadata: {
         "customer" => {
@@ -16,126 +16,356 @@ RSpec.describe "Accounts" do
       }
     )
 
-    create(:account, name: "Garry Gas", carrier: carrier, created_at: Time.utc(2021, 12, 10))
-    create(:account, name: "Alice Apples", carrier: carrier, created_at: Time.utc(2021, 10, 1))
-    create(:account, :disabled, name: "Disabled Account", carrier: carrier, created_at: Time.utc(2021, 12, 10))
+    create(:account, name: "Garry Gas", carrier:, created_at: Time.utc(2021, 12, 10))
+    create(:account, name: "Alice Apples", carrier:, created_at: Time.utc(2021, 10, 1))
+    create(
+      :account, :disabled, name: "Disabled Account", carrier:, created_at: Time.utc(2021, 12, 10)
+    )
 
-    sign_in(user)
+    carrier_sign_in(user)
     visit dashboard_accounts_path(
       filter: {
         from_date: "01/12/2021",
         to_date: "15/12/2021"
       }
     )
-    click_button("Filter")
+    click_on("Filter")
     check("Status")
     select("Enabled", from: "filter[status]")
     check("Metadata")
     fill_in("Key", with: "customer.id")
     fill_in("Value", with: "RR1234")
-    click_button("Done")
+    click_on("Done")
 
-    expect(page).to have_content("Filter 3")
-    expect(page).to have_content("Rocket Rides")
-    expect(page).not_to have_content("Garry Gas")
-    expect(page).not_to have_content("Alice Apples")
-    expect(page).not_to have_content("Disabled Account")
-    expect(page).not_to have_content("Carrier Account")
+    expect(page).to have_text("Filter 3")
+    expect(page).to have_text("Rocket Rides")
+    expect(page).to have_no_text("Garry Gas")
+    expect(page).to have_no_text("Alice Apples")
+    expect(page).to have_no_text("Disabled Account")
+    expect(page).to have_no_text("Carrier Account")
   end
 
   it "Create an account" do
-    user = create(:user, :carrier)
+    carrier = create(:carrier, :with_default_tariff_package)
+    create(
+      :tariff_package_plan,
+      package: carrier.default_tariff_package,
+      plan: create(:tariff_plan, :outbound_calls, carrier:, name: "Standard")
+    )
+    user = create(:user, :carrier, carrier:)
 
-    sign_in(user)
+    stub_rating_engine_balance_request
+    carrier_sign_in(user)
     visit dashboard_accounts_path
-    click_link("New")
+    click_on("New")
 
     fill_in "Name", with: "Rocket Rides"
-    click_button "Create Account"
+    fill_in "Calls per second", with: 2
+    enhanced_select("Basic.Slt", from: "Default TTS voice")
+    enhanced_select("Prepaid", from: "Billing mode")
+    click_on("Create Account")
 
-    expect(page).to have_content("Account was successfully created")
-    expect(page).to have_content("Rocket Rides")
-    expect(page).to have_content("Enabled")
+    expect(page).to have_text("Account was successfully created")
+    within("#voice") do
+      expect(page).to have_text("Calls per second")
+      expect(page).to have_text("2")
+    end
+
+    expect(page).to have_text("Rocket Rides")
+    expect(page).to have_text("Enabled")
     expect(page).to have_link("Edit")
-    expect(page).to have_content("Auth Token")
-    expect(page).to have_content("Carrier managed")
+    expect(page).to have_text("Carrier managed")
+    expect(page).to have_text("Basic.Slt (Female, en-US)")
+    within("#billing") do
+      within("#billing-enabled") do
+        expect(page).to have_text("Yes")
+      end
+      expect(page).to have_text("Prepaid")
+      expect(page).to have_link("Outbound calls (Standard)")
+    end
   end
 
   it "Handle validation errors" do
     user = create(:user, :carrier)
 
-    sign_in(user)
+    carrier_sign_in(user)
     visit new_dashboard_account_path
-    click_button "Create Account"
+    click_on("Create Account")
 
-    expect(page).to have_content("can't be blank")
+    expect(page).to have_text("can't be blank")
   end
 
-  it "Update an account", :js do
-    user = create(:user, :carrier)
-    account = create(
-      :account,
-      :enabled,
-      carrier: user.carrier
-    )
-    outbound_sip_trunk = create(:outbound_sip_trunk, carrier: user.carrier, name: "Main SIP Trunk")
+  it "Show an account" do
+    carrier = create(:carrier, billing_currency: "USD")
+    account = create(:account, carrier:, billing_enabled: true)
+    user = create(:user, :carrier, carrier: account.carrier)
 
-    sign_in(user)
+    stub_rating_engine_balance_request(balance: 10000)
+    carrier_sign_in(user)
     visit dashboard_account_path(account)
-    click_link("Edit")
-    uncheck("Enabled")
-    select("Main SIP Trunk", from: "Outbound SIP trunk")
-    fill_in("Owner's name", with: "John Doe")
-    fill_in("Owner's email", with: "johndoe@example.com")
 
-    perform_enqueued_jobs do
-      click_button "Update Account"
+    within("#authentication") do
+      expect(page).to have_link(
+        "Manage",
+        href: dashboard_auth_tokens_path(filter: { account_id: account.id, active: true })
+      )
     end
 
-    expect(page).to have_content("Account was successfully updated")
-    expect(page).to have_link(
-      "Main SIP Trunk", href: dashboard_outbound_sip_trunk_path(outbound_sip_trunk)
+    within("#billing") do
+      expect(page).to have_text("United States Dollar")
+      expect(page).to have_text("$100.00")
+      expect(page).to have_link("View", href: dashboard_balance_transactions_path(filter: { account_id: account.id }))
+      expect(page).to have_link("Manage", href: dashboard_phone_number_plans_path(filter: { account_id: account.id }))
+    end
+
+    within("#voice") do
+      expect(page).to have_link(
+        "View",
+        href: dashboard_phone_calls_path(filter: { account_id: account.id })
+      )
+    end
+
+    within("#text-to-speech") do
+      expect(page).to have_link(
+        "View",
+        href: dashboard_tts_events_path(filter: { account_id: account.id })
+      )
+    end
+
+    within("#phone-numbers") do
+      expect(page).to have_link(
+        "Manage",
+        href: dashboard_alphanumeric_sender_ids_path(filter: { account_id: account.id })
+      )
+    end
+
+    within("#messaging") do
+      expect(page).to have_link(
+        "View",
+        href: dashboard_messages_path(filter: { account_id: account.id })
+      )
+
+      expect(page).to have_link(
+        "Manage",
+        href: dashboard_messaging_services_path(filter: { account_id: account.id })
+      )
+    end
+  end
+
+  it "Reset 2FA for the account owner" do
+    carrier = create(:carrier)
+    account = create(
+      :account,
+      :customer_managed,
+      carrier:,
+      account_memberships: [
+        build(
+          :account_membership,
+          :owner,
+          user: create(
+            :user,
+            :otp_required_for_login,
+            email: "john.doe@example.com"
+          )
+        )
+      ]
     )
-    expect(page).to have_content("Disabled")
-    expect(page).to have_content("Customer managed")
-    expect(page).to have_content("John Doe")
-    expect(page).to have_content("johndoe@example.com")
+    user = create(:user, :admin, :carrier, carrier:)
+    stub_rating_engine_balance_request
+
+    carrier_sign_in(user)
+    visit dashboard_account_path(account)
+
+    within("#otp-required-for-login") do
+      expect(page).to have_text("Yes")
+    end
+
+    click_on("Reset 2FA")
+
+    expect(page).to have_text("2FA was successfully reset for john.doe@example.com")
+    within("#otp-required-for-login") do
+      expect(page).to have_text("No")
+    end
+  end
+
+  it "Update an account" do
+    carrier = create(:carrier)
+    user = create(:user, :carrier, carrier:)
+    account = create(
+      :account,
+      :carrier_managed,
+      :enabled,
+      :billing_enabled,
+      carrier: user.carrier,
+      default_tts_voice: "Basic.Kal"
+    )
+    sip_trunk = create(:sip_trunk, carrier:, name: "Main SIP Trunk")
+
+    stub_rating_engine_balance_request
+    carrier_sign_in(user)
+    visit dashboard_account_path(account)
+    click_on("Edit")
+    enhanced_select("Main SIP Trunk", from: "SIP trunk")
+    fill_in("Owner's name", with: "John Doe")
+    fill_in("Owner's email", with: "johndoe@example.com")
+    enhanced_select("Basic.Slt", from: "Default TTS voice")
+    uncheck("Billing enabled")
+    within("#danger-zone") do
+      uncheck("Enabled")
+    end
+
+    perform_enqueued_jobs do
+      click_on("Update Account")
+    end
+
+    expect(page).to have_text("Account was successfully updated")
+    expect(page).to have_link(
+      "Main SIP Trunk", href: dashboard_sip_trunk_path(sip_trunk)
+    )
+    expect(page).to have_text("Disabled")
+    expect(page).to have_text("Customer managed")
+    expect(page).to have_text("John Doe")
+    expect(page).to have_text("johndoe@example.com")
+    expect(page).to have_text("Basic.Slt (Female, en-US)")
+    within("#billing-enabled") do
+      expect(page).to have_text("No")
+    end
     expect(last_email_sent).to deliver_to("johndoe@example.com")
+  end
+
+  it "Remove a SIP trunk" do
+    user = create(:user, :carrier)
+    sip_trunk = create(:sip_trunk, carrier: user.carrier, name: "Main SIP Trunk")
+    account = create(
+      :account,
+      sip_trunk:,
+      carrier: user.carrier
+    )
+
+    stub_rating_engine_balance_request
+    carrier_sign_in(user)
+    visit edit_dashboard_account_path(account)
+
+    enhanced_select("", from: "SIP trunk")
+    click_on("Update Account")
+
+    expect(page).to have_text("Account was successfully updated")
+    expect(page).to have_no_link(
+      "Main SIP Trunk"
+    )
+  end
+
+  it "Update a customer managed account" do
+    carrier = create(:carrier)
+    create(:sip_trunk, carrier:, name: "Main SIP Trunk")
+    tariff_plan = create(:tariff_plan, :outbound_messages, name: "Standard", carrier:)
+    account = create(
+      :account,
+      :customer_managed,
+      :billing_enabled,
+      :enabled,
+      carrier:,
+      default_tts_voice: "Basic.Slt",
+    )
+    existing_tariff_plan_subscriptions = [
+      create(
+        :tariff_plan_subscription,
+        account:,
+        plan: create(
+          :tariff_plan,
+          :outbound_calls,
+          carrier:,
+          name: "Standard"
+        )
+      ),
+      create(
+        :tariff_plan_subscription,
+        account:,
+        plan: create(
+          :tariff_plan,
+          :inbound_calls,
+          carrier:,
+          name: "Standard"
+        )
+      )
+    ]
+    user = create(:user, :carrier, carrier:)
+
+    stub_rating_engine_balance_request
+    carrier_sign_in(user)
+    visit edit_dashboard_account_path(account)
+
+    expect(page).to have_field("Name", disabled: true)
+    expect(page).to have_enhanced_select("Default TTS voice", disabled: true)
+
+    enhanced_select("Main SIP Trunk", from: "SIP trunk")
+
+    within(".outbound-messages-line-item") do
+      check("Enabled")
+      enhanced_select("Outbound messages (Standard)", from: "Plan")
+    end
+
+    within(".inbound-calls-line-item") do
+      uncheck("Enabled")
+    end
+
+    click_on("Update Account")
+
+    expect(page).to have_text("Account was successfully updated")
+    expect(page).to have_text("Basic.Slt (Female, en-US)")
+    expect(page).to have_text("Customer managed")
+
+    expect(page).to have_link(
+      "Outbound messages (Standard)",
+      href: dashboard_tariff_plan_path(tariff_plan)
+    )
+    expect(page).to have_link(
+      "Outbound calls (Standard)",
+      href: dashboard_tariff_plan_path(existing_tariff_plan_subscriptions[0].plan)
+    )
+    expect(page).to have_no_link("Inbound calls (Standard)")
   end
 
   it "Resend invitation" do
     user = create(:user, :carrier, :admin)
     account = create(:account, carrier: user.carrier)
     invited_user = create(:user, :invited, email: "johndoe@example.com")
-    create(:account_membership, :owner, account: account, user: invited_user)
+    create(:account_membership, :owner, account:, user: invited_user)
+    stub_rating_engine_balance_request
 
-    sign_in(user)
+    carrier_sign_in(user)
     visit dashboard_account_path(account)
 
-    expect(page).to have_content("The account owner has not yet accepted their invite.")
+    expect(page).to have_text("The account owner has not yet accepted their invite.")
 
     perform_enqueued_jobs do
-      click_link("Resend")
+      click_on("Resend")
     end
 
-    expect(page).to have_content("An invitation email has been sent to johndoe@example.com.")
+    expect(page).to have_text("An invitation email has been sent to johndoe@example.com.")
     expect(page).to have_current_path(dashboard_account_path(account))
     expect(last_email_sent).to deliver_to("johndoe@example.com")
   end
 
   it "Delete an account" do
-    user = create(:user, :carrier)
+    carrier = create(:carrier)
+    user = create(:user, :carrier, carrier:)
     account = create(
       :account,
       name: "Rocket Rides",
-      carrier: user.carrier
+      carrier:,
     )
 
-    sign_in(user)
+    stub_rating_engine_balance_request
+    carrier_sign_in(user)
     visit dashboard_account_path(account)
 
-    click_link "Delete"
+    click_on "Delete"
 
-    expect(page).not_to have_content("Rocket Rides")
+    expect(page).to have_no_text("Rocket Rides")
+  end
+
+  def stub_rating_engine_balance_request(**)
+    stub_rating_engine_request(result: build(:rating_engine_account_response, **))
   end
 end

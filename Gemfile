@@ -4,51 +4,72 @@ source "https://rubygems.org"
 
 git_source(:github) { |repo| "https://github.com/#{repo}.git" }
 
-gem "rails", "~> 6.1.0"
+gem "rails", "~> 8.1.4"
 
-gem "administrate"
-gem "administrate_exportable"
+# For Administrate
+gem "administrate", github: "thoughtbot/administrate"
 gem "administrate-field-active_storage"
 gem "image_processing"
+gem "ruby-vips"
 
 gem "aasm"
+gem "active_storage_validations"
+gem "addressable"
+gem "anycable-rails"
 gem "after_commit_everywhere"
+gem "aws-actionmailer-ses"
+gem "aws-sdk-cloudwatch"
 gem "aws-sdk-ec2"
+gem "aws-sdk-polly"
 gem "aws-sdk-rails"
 gem "aws-sdk-s3"
+gem "aws-sdk-sesv2"
 gem "aws-sdk-sqs"
+gem "bootstrap-email", "1.8.1"
+gem "cgrates", github: "somleng/cgrates-ruby"
+gem "connection_pool"
 gem "country_select"
+gem "cssbundling-rails"
 gem "cursor_paginator"
+gem "csv"
 gem "devise"
 gem "devise_invitable"
 gem "devise-two-factor"
 gem "doorkeeper"
 gem "dry-validation"
 gem "enumerize"
+gem "faraday"
+gem "haikunator"
 gem "http"
+gem "jsbundling-rails"
 gem "jsonapi-serializer"
 gem "jwt"
 gem "kaminari"
 gem "lograge"
-gem "money"
+gem "money-rails"
 gem "okcomputer"
+gem "openssl"
 gem "pg"
 gem "phony"
+gem "propshaft"
 gem "puma"
 gem "pundit"
+gem "recaptcha"
+gem "redis"
 gem "responders"
 gem "rqrcode"
-gem "sassc-rails"
 gem "sentry-rails"
 gem "sentry-ruby"
 gem "shoryuken"
 gem "show_for"
 gem "simple_form"
-gem "skylight"
-gem "turbolinks"
+gem "smstools"
+gem "stimulus-rails"
+gem "tts_voices", github: "somleng/tts_voices"
+gem "turbo-rails"
 gem "twilio-ruby"
 gem "tzinfo-data"
-gem "webpacker"
+gem "with_advisory_lock"
 
 # Reduces boot times through caching; required in config/boot.rb
 gem "bootsnap", require: false
@@ -57,25 +78,23 @@ group :development, :test do
   gem "pry"
   gem "rspec_api_documentation", github: "zipmark/rspec_api_documentation"
   gem "rspec-rails"
-  gem "rubocop"
-  gem "rubocop-performance"
-  gem "rubocop-rails"
-  gem "rubocop-rspec"
 end
 
 group :development do
-  gem "spring"
-  gem "spring-commands-rspec"
+  gem "foreman", require: false
   gem "squasher", require: false
+  gem "rubocop-capybara", require: false
+  gem "rubocop-rails-omakase", require: false
+  gem "rubocop-rspec", require: false
 end
 
 group :test do
   gem "capybara"
   gem "email_spec"
   gem "factory_bot_rails"
-  gem "shoulda-matchers"
+  gem "mock_redis"
+  gem "selenium-webdriver"
   gem "simplecov", require: false
   gem "simplecov-lcov", require: false
-  gem "webdrivers"
   gem "webmock"
 end

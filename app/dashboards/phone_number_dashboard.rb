@@ -3,40 +3,55 @@ require "administrate/base_dashboard"
 class PhoneNumberDashboard < Administrate::BaseDashboard
   ATTRIBUTE_TYPES = {
     carrier: Field::BelongsTo,
-    account: Field::BelongsTo,
+    active_plan: Field::HasOne,
+    plans: Field::HasMany,
     phone_calls: Field::HasMany,
+    messages: Field::HasMany,
     id: Field::String,
     number: Field::String,
-    voice_url: Field::String,
-    voice_method: Field::String,
-    status_callback_url: Field::String,
-    status_callback_method: Field::String,
-    sip_domain: Field::String,
-    created_at: Field::DateTime,
-    updated_at: Field::DateTime
+    country: Field::String.with_options(searchable: false),
+    type: Field::String,
+    visibility: Field::String,
+    price: Field::String.with_options(searchable: false),
+    region_name: Field::String.with_options(searchable: false),
+    locality: Field::String,
+    created_at: Field::LocalTime,
+    updated_at: Field::LocalTime
   }.freeze
 
   COLLECTION_ATTRIBUTES = %i[
-    account
+    carrier
     number
-    voice_url
-    voice_method
+    country
+    region_name
+    locality
+    type
+    visibility
+    price
+    created_at
   ].freeze
 
   SHOW_PAGE_ATTRIBUTES = %i[
-    carrier
-    account
     id
+    country
+    region_name
+    locality
+    type
+    price
+    carrier
     number
-    voice_url
-    voice_method
-    status_callback_url
-    status_callback_method
-    sip_domain
+    visibility
     created_at
     updated_at
+    active_plan
+    plans
     phone_calls
+    messages
   ].freeze
 
   COLLECTION_FILTERS = {}.freeze
+
+  def display_resource(phone_number)
+    phone_number.number
+  end
 end

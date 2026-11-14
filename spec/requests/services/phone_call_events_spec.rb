@@ -1,7 +1,7 @@
 require "rails_helper"
 
-RSpec.describe "Services" do
-  describe "POST /services/phone_call_events" do
+RSpec.describe "Services", :services do
+  describe "POST /phone_call_events" do
     it "creates a phone call event" do
       phone_call = create(
         :phone_call,
@@ -14,18 +14,16 @@ RSpec.describe "Services" do
           services_phone_call_events_path,
           params: {
             phone_call: phone_call.external_id,
-            type: "completed",
-            variables: {
-              "sip_term_status" => "200",
-              "answer_epoch" => "1585814727"
-            }
+            type: "answered"
           },
           headers: build_authorization_headers("services", "password")
         )
       end
 
       expect(response.code).to eq("201")
-      expect(phone_call.reload.status).to eq("completed")
+      expect(phone_call.reload).to have_attributes(
+        status: "answered",
+      )
     end
 
     it "handles invalid requests" do

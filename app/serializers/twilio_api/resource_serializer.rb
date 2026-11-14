@@ -1,20 +1,30 @@
 module TwilioAPI
   class ResourceSerializer < TwilioAPISerializer
+    API_VERSION = "2010-04-01".freeze
+
     def attributes
       super.merge(
+        "api_version" => nil,
         "sid" => nil,
-        "account_sid" => nil,
         "date_created" => nil,
         "date_updated" => nil
       )
     end
 
+    def api_version
+      API_VERSION
+    end
+
+    def sid
+      object.id
+    end
+
     def date_created
-      format_time(__getobj__.created_at)
+      format_time(object.created_at)
     end
 
     def date_updated
-      format_time(__getobj__.updated_at)
+      format_time(object.updated_at)
     end
 
     private

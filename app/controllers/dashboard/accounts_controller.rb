@@ -10,12 +10,12 @@ module Dashboard
     end
 
     def new
-      @resource = initialize_form
+      @resource = AccountForm.new(carrier: current_carrier, current_user:)
     end
 
     def create
-      @resource = initialize_form(permitted_params)
-      @resource.save
+      @resource = AccountForm.new(carrier: current_carrier, current_user:, **permitted_params)
+      UpdateAccountForm.call(@resource)
 
       respond_with(:dashboard, @resource)
     end
@@ -25,34 +25,32 @@ module Dashboard
     end
 
     def update
-      @resource = initialize_form(permitted_params)
-      @resource.account = record
-      @resource.save
+      @resource = AccountForm.initialize_with(record)
+      @resource.attributes = permitted_params
+      UpdateAccountForm.call(@resource)
 
       respond_with(:dashboard, @resource)
     end
 
     def destroy
-      record.destroy
+      DestroyAccount.call(record)
       respond_with(:dashboard, record)
     end
 
     private
 
-    def initialize_form(params = {})
-      @resource = AccountForm.new(params)
-      @resource.carrier = current_carrier
-      @resource.current_user = current_user
-      @resource
-    end
-
     def permitted_params
       params.require(:account).permit(
         :name,
+        :default_tts_voice,
         :owner_name,
         :owner_email,
-        :outbound_sip_trunk_id,
-        :enabled
+        :sip_trunk_id,
+        :calls_per_second,
+        :enabled,
+        :billing_enabled,
+        :billing_mode,
+        tariff_plan_subscriptions: [ :id, :plan_id, :category, :enabled ]
       )
     end
 

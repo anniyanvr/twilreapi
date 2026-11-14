@@ -1,0 +1,128 @@
+<div class="card-body">
+  <%= simple_form_for([:dashboard, resource]) do |f| %>
+    <%= page_sections_container do %>
+
+      <%= page_section("Properties") do %>
+        <div class="row">
+          <div class="col-sm-6">
+            <%= f.input(
+              :name,
+              hint: "A friendly name for the messaging service"
+            ) %>
+          </div>
+
+          <% if current_user.carrier_user? %>
+            <div class="col-sm-6">
+              <%= f.input(
+                :account_id,
+                collection: resource.account_options_for_select,
+                selected: resource.account_id,
+                disabled: resource.persisted?,
+                prompt: "",
+                input_html: { data: { controller: "enhanced-select" } }
+              ) %>
+            </div>
+          <% end %>
+        </div>
+      <% end %>
+
+      <% if resource.persisted? %>
+        <%= page_section("Sender Pool") do %>
+          <div class="row">
+            <div class="col-sm-6">
+              <%= f.input(
+                :incoming_phone_number_ids,
+                label: "Phone numbers",
+                collection: resource.incoming_phone_numbers_options_for_select,
+                selected: resource.incoming_phone_number_ids,
+                input_html: {
+                  multiple: true,
+                  data: {
+                    controller: "enhanced-select",
+                    enhanced_select_options: {
+                      removeItemButton: true
+                    }
+                  }
+                },
+                hint: "A list of phone numbers to add to your messaging service"
+              ) %>
+            </div>
+
+            <div class="col-sm-6">
+              <%= f.input(
+                :alphanumeric_sender_id_id,
+                collection: resource.alphanumeric_sender_ids_options_for_select,
+                input_html: {
+                  data: {
+                    controller: "enhanced-select",
+                    enhanced_select_options: {
+                      removeItemButton: true
+                    }
+                  }
+                },
+                hint: "Select a pre-approved Sender ID. When selected, this name will take priority over your specified phone numbers for supported destinations."
+              ) %>
+            </div>
+          </div>
+        <% end %>
+
+        <%= page_section(
+          "Integration",
+          data: {
+            controller: "messaging-service-integration"
+          }
+        ) do %>
+          <div class="row">
+            <%= f.input(
+              :inbound_message_behavior,
+              collection: resource.inbound_message_behavior_options_for_select,
+              wrapper: :vertical_collection_novalidate,
+              input_html: {
+                data: {
+                  action: "click->messaging-service-integration#changeInboundMessageBehavior",
+                  messaging_service_integration_target: "InboundMessageBehaviorInput"
+                }
+              },
+              as: :radio_buttons
+            ) %>
+          </div>
+
+          <div class="row" data-messaging-service-integration-target="inboundRequestSection">
+            <div class="col-sm-6">
+              <%= f.input :inbound_request_url, hint: "Invoke an HTTP webhook for all incoming messages. Must start with http or https" %>
+            </div>
+
+            <div class="col-sm-6">
+              <%= f.input :inbound_request_method, collection: MessagingService.inbound_request_method.values, include_blank: true %>
+            </div>
+          </div>
+
+          <div class="row">
+            <div class="col-sm-6">
+              <%= f.input :status_callback_url, hint: "Provide a URL to call via webhook to let you know the delivery status of your message. Must start with http or https" %>
+            </div>
+          </div>
+        <% end %>
+
+        <%= page_section("Content Settings") do %>
+          <div class="row">
+            <div class="col-sm-6">
+              <%= f.input(
+                :smart_encoding,
+                as: :boolean,
+                wrapper: :boolean_switch,
+                hint: "Smart encoding detects Unicode characters that are easy to miss and replaces them with similar GSM encoded characters. This substitution helps ensure that your messages are segmented properly at 160 characters"
+              ) %>
+            </div>
+          </div>
+        <% end %>
+      <% end %>
+
+      <div class="row">
+        <div class="col-6">
+          <%= f.button :submit %>
+        </div>
+      </div>
+    <% end %>
+  <% end %>
+</div>

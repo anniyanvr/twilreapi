@@ -1,5 +1,7 @@
 module Dashboard
   class CarrierSettingsController < DashboardController
+    self.action_on_open_redirect = :log
+
     def show
       @resource = current_carrier
     end
@@ -13,13 +15,19 @@ module Dashboard
       @resource.carrier = current_carrier
       @resource.save
 
-      respond_with(@resource, location: dashboard_carrier_settings_path)
+      respond_with(
+        @resource,
+        location: dashboard_carrier_settings_url(host: current_carrier.subdomain_host)
+      )
     end
 
     private
 
     def permitted_params
-      params.require(:carrier_settings).permit(:name, :country, :logo, :webhook_url, :enable_webhooks)
+      params.require(:carrier_settings).permit(
+        :name, :country, :logo, :favicon, :webhook_url, :enable_webhooks, :website, :subdomain,
+        :custom_app_host, :custom_api_host, :default_tariff_package_id, :api_allowed_ip_addresses
+      )
     end
 
     def policy_class

@@ -9,40 +9,148 @@
 <% end %>
 
 <div class="card-body">
-  <% if UserInvitationPolicy.new(pundit_user, @resource.owner).update? %>
+  <% if UserInvitationPolicy.new(current_user, @resource.owner).update? %>
     <div class="alert alert-info" role="alert">
-      <i class="fas fa-info-circle"></i> The account owner has not yet accepted their invite.
-      <%= link_to("Resend", dashboard_user_invitation_path(@resource.owner), method: :patch) %>
+      <i class="fa-solid fa-info-circle"></i> The account owner has not yet accepted their invite.
+      <%= button_to("Resend", dashboard_user_invitation_path(@resource.owner), class: "btn btn-link p-0", form_class: "d-inline", method: :patch) %>
     </div>
   <% end %>
 
-  <%= show_for(@resource) do |f| %>
-    <%= f.attribute :name, value: @resource.name %>
-    <%= f.attribute :id, label: "SID" do %>
-      <code>
-        <%= @resource.id %>
-      </code>
-    <% end %>
-    <% if policy(@resource).show_auth_token? %>
-      <%= f.attribute :auth_token, label: "Auth Token", value: mask_content(@resource.auth_token) %>
-    <% end %>
-    <%= f.attribute :type, value: @resource.type.humanize %>
-    <%= f.attribute :status, value: @resource.status.humanize %>
-    <%= f.attribute :owner_name, value: @resource.owner&.name %>
-    <%= f.attribute :owner_email, value: @resource.owner&.email %>
-    <%= f.attribute :phone_numbers, value: external_link_to("Manage", dashboard_phone_numbers_path(filter: {account_id: @resource.id}), title: "Manage phone numbers") %>
-    <%= f.attribute :phone_calls, value: external_link_to("Manage", dashboard_phone_calls_path(filter: {account_id: @resource.id}), title: "Manage phone calls") %>
-    <%= f.attribute :outbound_sip_trunk do %>
-      <% if @resource.outbound_sip_trunk.present? %>
-        <%= external_link_to(@resource.outbound_sip_trunk.name, dashboard_outbound_sip_trunk_path(@resource.outbound_sip_trunk)) %>
+  <%= page_sections_container do %>
+    <%= page_section("General") do %>
+      <%= show_for(@resource) do |f| %>
+        <%= f.attribute :id, label: "SID" do %>
+          <code>
+            <%= @resource.id %>
+          </code>
+        <% end %>
+
+        <%= f.attribute :name, value: @resource.name %>
+        <%= f.attribute :type, value: @resource.type.text %>
+        <%= f.attribute :status, value: @resource.status.text %>
+        <%= f.attribute :metadata do %>
+          <pre><code><%= JSON.pretty_generate(@resource.metadata) %></code></pre>
+        <% end %>
+
+        <%= f.attribute :created_at, value: local_time(@resource.created_at) %>
+        <%= f.attribute :updated_at, value: local_time(@resource.updated_at) %>
       <% end %>
     <% end %>
 
-    <%= f.attribute :metadata do %>
-      <pre><code><%= JSON.pretty_generate(@resource.metadata) %></code></pre>
+    <% if policy(:auth_token).index? && @resource.carrier_managed? %>
+      <%= page_section("Authentication") do %>
+        <%= show_for(@resource) do |f| %>
+          <%= f.attribute(:auth_tokens) do %>
+            <%= external_link_to(
+              "Manage",
+              dashboard_auth_tokens_path(filter: { account_id: @resource.id, active: true }),
+              title: "Manage auth tokens"
+            ) %>
+          <% end %>
+        <% end %>
+      <% end %>
     <% end %>
 
-    <%= f.attribute :created_at, value: local_time(@resource.created_at) %>
-    <%= f.attribute :updated_at, value: local_time(@resource.updated_at) %>
+    <% if @resource.customer_managed? && @resource.owner.present? %>
+      <%= page_section(
+        "Owner",
+        actions: (render("shared/reset_2fa_page_action", user: @resource.owner) if TwoFactorAuthenticationPolicy.new(current_user, @resource.owner).destroy?)
+      ) do %>
+        <%= show_for(@resource.owner.decorated) do |f| %>
+          <%= f.attribute(:name) %>
+          <%= f.attribute(:email) %>
+          <%= f.attribute(:otp_required_for_login, content_html: { id: "otp-required-for-login" }) %>
+        <% end %>
+      <% end %>
+    <% end %>
+
+    <%= page_section("Billing") do %>
+      <%= show_for(@resource) do |f| %>
+        <%= f.attribute(:billing_enabled, content_html: { id: "billing-enabled" }) %>
+        <%= f.attribute :balance, value: GetAccountBalance.call(f.object).format %>
+        <%= f.attribute :billing_currency, value: f.object.billing_currency.name %>
+
+        <%= f.attribute(:balance_transactions) do %>
+          <%= external_link_to(
+            "View",
+            dashboard_balance_transactions_path(filter: { account_id: f.object.id }),
+            title: "View"
+          ) %>
+        <% end %>
+
+        <%= f.attribute :billing_mode, value: f.object.billing_mode.text %>
+        <%= f.attribute :tariff_plans do %>
+          <% if f.object.tariff_plan_subscriptions.present? %>
+            <%= tariff_plans(f.object.tariff_plan_subscriptions) %>
+          <% end %>
+        <% end %>
+
+        <%= f.attribute(:phone_number_plans) do %>
+          <%= external_link_to(
+            "View",
+            dashboard_phone_number_plans_path(filter: { account_id: @resource.id }),
+            title: "Manage"
+          ) %>
+        <% end %>
+      <% end %>
+    <% end %>
+
+    <%= page_section("Phone numbers") do %>
+      <%= show_for(@resource) do |f| %>
+        <%= f.attribute :active_phone_numbers do %>
+          <%= external_link_to("Manage", dashboard_incoming_phone_numbers_path(filter: { status: :active, account_id: @resource.id}), title: "Manage") %>
+        <% end %>
+
+        <%= f.attribute :alphanumeric_sender_ids do %>
+          <%= external_link_to("Manage", dashboard_alphanumeric_sender_ids_path(filter: { account_id: @resource.id}), title: "Manage") %>
+        <% end %>
+      <% end %>
+    <% end %>
+
+    <%= page_section("Voice") do %>
+      <%= show_for(@resource) do |f| %>
+        <%= f.attribute :sip_trunk do %>
+          <% if @resource.sip_trunk.present? %>
+            <%= external_link_to(@resource.sip_trunk.name, dashboard_sip_trunk_path(@resource.sip_trunk)) %>
+          <% end %>
+        <% end %>
+
+        <%= f.attribute :calls_per_second %>
+
+        <% if policy(:phone_call).index? %>
+          <%= f.attribute(:phone_calls) do %>
+            <%= external_link_to("View", dashboard_phone_calls_path(filter: { account_id: @resource.id }), title: "View phone calls") %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+
+    <%= page_section("Messaging") do %>
+      <%= show_for(@resource) do |f| %>
+        <% if policy(:message).index? %>
+          <%= f.attribute(:messages) do %>
+            <%= external_link_to("View", dashboard_messages_path(filter: { account_id: @resource.id }), title: "View messages") %>
+          <% end %>
+        <% end %>
+
+        <% if policy(:messaging_service).index? %>
+          <%= f.attribute(:messaging_services) do %>
+            <%= external_link_to("Manage", dashboard_messaging_services_path(filter: { account_id: @resource.id }), title: "Manage messaging services") %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
+
+    <%= page_section("Text to Speech") do %>
+      <%= show_for(@resource) do |f| %>
+        <%= f.attribute :voice, value: @resource.default_tts_voice %>
+
+        <% if policy(:tts_event).index? %>
+          <%= f.attribute(:tts_events) do %>
+            <%= external_link_to("View", dashboard_tts_events_path(filter: { account_id: @resource.id }), title: "View TTS events") %>
+          <% end %>
+        <% end %>
+      <% end %>
+    <% end %>
   <% end %>
 </div>

@@ -4,10 +4,9 @@ class DashboardController < ApplicationController
 
   include UserAuthorization
 
-  prepend_before_action :find_record, only: %i[show edit update destroy]
   prepend_before_action :authenticate_user!
-
   before_action :enforce_two_factor_authentication!
+  helper_method :filter_params
 
   private
 
@@ -16,14 +15,15 @@ class DashboardController < ApplicationController
 
     redirect_to(
       new_dashboard_two_factor_authentication_path,
-      alert: "Two Factor Authentication Required"
+      alert: "Two Factor Authentication Required",
+      status: :see_other
     )
   end
 
   def apply_filters(resources_scope)
-    resources_scope.filter_class.new(
-      resources_scope: resources_scope,
-      input_params: request.params
+    filter_class(resources_scope).new(
+      resources_scope:,
+      input_params: request.query_parameters
     ).apply
   end
 
@@ -31,9 +31,11 @@ class DashboardController < ApplicationController
     resources_scope.latest_first.page(params[:page]).without_count
   end
 
-  def find_record
-    record
+  def filter_class(resources_scope)
+    resources_scope.filter_class
   end
 
-  def record; end
+  def filter_params
+    request.query_parameters.slice(:filter)
+  end
 end

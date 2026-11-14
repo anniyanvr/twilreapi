@@ -1,67 +1,138 @@
 module Services
   class InboundPhoneCallRequestSchema < ServicesRequestSchema
+    option :error_log_messages
+    option :phone_number_validator, default: -> { PhoneNumberValidator.new }
+    option :phone_number_configuration_rules,
+           default: -> { PhoneNumberConfigurationRules.new }
+    option :sip_trunk_resolver, default: -> { InboundSIPTrunkResolver.new }
+    option :account_billing_policy, default: -> { AccountBillingPolicy.new }
+
     params do
-      required(:to).value(ApplicationRequestSchema::Types::PhoneNumber, :filled?)
+      required(:to).value(ApplicationRequestSchema::Types::Number, :filled?)
+      required(:from).value(ApplicationRequestSchema::Types::Number, :filled?)
       required(:source_ip).filled(:str?)
-      required(:from).filled(:str?)
       required(:external_id).filled(:str?)
+      required(:host).filled(:str?)
+      required(:region).filled(:str?, included_in?: SomlengRegion::Region.all.map(&:alias))
+      optional(:client_identifier).maybe(:str?)
       optional(:variables).maybe(:hash)
     end
 
-    rule(:source_ip) do |context:|
-      context[:inbound_sip_trunk] = InboundSIPTrunk.find_by(source_ip: value)
-      key("source_ip").failure("does not exist") if context[:inbound_sip_trunk].blank?
+    rule(:client_identifier, :source_ip, :to) do |context:|
+      if values[:client_identifier].present?
+        source_identity = values.fetch(:client_identifier)
+        context[:sip_trunk] = SIPTrunk.find_by(username: source_identity)
+      else
+        source_identity = values.fetch(:source_ip)
+        context[:sip_trunk] = sip_trunk_resolver.find_sip_trunk_by(source_ip: source_identity, destination_number: values[:to])
+      end
+
+      if context[:sip_trunk].blank?
+        base.failure("#{source_identity} doesn't exist")
+        error_log_messages << "SIP trunk does not exist for #{source_identity}"
+      end
     end
 
     rule(:to) do |context:|
-      if context[:inbound_sip_trunk].present?
-        context[:phone_number] = context[:inbound_sip_trunk].carrier.phone_numbers.where.not(account_id: nil).find_by(number: value)
-        key("to").failure("does not exist") if context[:phone_number].blank?
+      next if context[:sip_trunk].blank?
+
+      context[:to] = context.fetch(:sip_trunk).normalize_number(value)
+      incoming_phone_numbers = context[:sip_trunk].carrier.incoming_phone_numbers.active
+      context[:incoming_phone_number] = incoming_phone_numbers.find_by(number: context[:to])
+      next if phone_number_configuration_rules.valid?(context[:incoming_phone_number]) do
+        context[:incoming_phone_number].voice_url.present?
       end
+
+      error_message = format(phone_number_configuration_rules.error_message, value: context[:to])
+      base.failure(error_message)
+      error_log_messages << error_message
+    end
+
+    rule(:from) do |context:|
+      next if context[:sip_trunk].blank?
+
+      context[:from] = context.fetch(:sip_trunk).normalize_number(value)
+      unless phone_number_validator.valid?(context[:from])
+        key.failure(
+          "is invalid. It must be an E.164 formatted phone number and must include the country code"
+        )
+        error_log_messages << "From #{context[:from]} is invalid. It must be an E.164 formatted phone number and must include the country code"
+      end
+    end
+
+    rule do |context:|
+      error_log_messages.carrier = context[:sip_trunk]&.carrier
+      error_log_messages.account = context[:incoming_phone_number]&.account
+    end
+
+    rule do |context:|
+      next if context[:incoming_phone_number].blank?
+      next if CarrierStanding.new(context[:incoming_phone_number].carrier).good_standing?
+
+      error = schema_helper.fetch_error(:carrier_standing)
+      base.failure(text: error.message, code: error.code)
+      error_log_messages << error.message
+    end
+
+    rule do |context:|
+      next if context[:incoming_phone_number].blank?
+      next if result.errors.any?
+
+      account = context[:incoming_phone_number].account
+      interaction = PhoneCall.new(account:, direction: :inbound, to: context[:to])
+      next if account_billing_policy.valid?(interaction:)
+
+      error = schema_helper.fetch_error(account_billing_policy.error_code)
+      base.failure(text: error.message, code: error.code)
+      error_log_messages << error.message
+    end
+
+    rule do |context:|
+      next if context[:incoming_phone_number].blank?
+      next unless context[:incoming_phone_number].account.billing_enabled?
+      next if context[:sip_trunk].blank?
+      next if context[:sip_trunk].region.alias == "hydrogen"
+
+      error = schema_helper.fetch_error(:region_not_supported)
+      base.failure(text: error.message, code: error.code)
+      error_log_messages << error.message
     end
 
     def output
       params = super
 
       result = {}
-      result[:to] = params.fetch(:to)
       result[:external_id] = params.fetch(:external_id)
       result[:variables] = params.fetch(:variables) if params.key?(:variables)
 
-      phone_number = context.fetch(:phone_number)
-      result[:phone_number] = phone_number
-      result[:inbound_sip_trunk] = context.fetch(:inbound_sip_trunk)
+      incoming_phone_number = context.fetch(:incoming_phone_number)
+      result[:incoming_phone_number] = incoming_phone_number
+      result[:phone_number] = incoming_phone_number.phone_number
+      result[:sip_trunk] = context.fetch(:sip_trunk)
       result[:direction] = :inbound
-      result[:account] = phone_number.account
-      result[:carrier] = phone_number.carrier
-      result[:voice_url] = phone_number.voice_url
-      result[:voice_method] = phone_number.voice_method
-      result[:status_callback_url] = phone_number.status_callback_url
-      result[:status_callback_method] = phone_number.status_callback_method
-      result[:twiml] = route_to_sip_domain(phone_number) if phone_number.sip_domain.present?
-      result[:from] = normalize_from(
-        params.fetch(:from),
-        result[:inbound_sip_trunk].trunk_prefix_replacement
-      )
+      result[:account] = incoming_phone_number.account
+      result[:carrier] = incoming_phone_number.carrier
+      result[:voice_url] = incoming_phone_number.voice_url
+      result[:voice_method] = incoming_phone_number.voice_method
+      result[:status_callback_url] = incoming_phone_number.status_callback_url
+      result[:status_callback_method] = incoming_phone_number.status_callback_method
+      result[:call_service_host] = params.fetch(:host)
+      result[:region] = params.fetch(:region)
+      if incoming_phone_number.sip_domain.present?
+        result[:twiml] = route_to_sip_domain(incoming_phone_number)
+      end
+      result[:to] = context[:to]
+      result[:from] = context[:from]
 
       result
     end
 
     private
 
-    def normalize_from(from, trunk_prefix_replacement)
-      result = from.sub(/\A\+*/, "")
-
-      return result if trunk_prefix_replacement.blank?
-      return result if result.starts_with?(trunk_prefix_replacement)
-
-      result.sub(/\A(?:0)?/, "").prepend(trunk_prefix_replacement)
-    end
-
-    def route_to_sip_domain(phone_number)
+    def route_to_sip_domain(incoming_phone_number)
       response = Twilio::TwiML::VoiceResponse.new
       response.dial do |dial|
-        dial.sip("sip:#{phone_number.number}@#{phone_number.sip_domain}")
+        dial.sip(sip_url: "sip:#{incoming_phone_number.number}@#{incoming_phone_number.sip_domain}")
       end
       response.to_xml
     end

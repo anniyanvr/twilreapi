@@ -1,6 +1,9 @@
 require "csv"
 
 class ExportCSV < ApplicationWorkflow
+  include ActionView::Helpers::NumberHelper
+  include ActionView::Helpers::TextHelper
+
   attr_reader :export
 
   def initialize(export)
@@ -8,32 +11,51 @@ class ExportCSV < ApplicationWorkflow
   end
 
   def call
-    csv = generate_csv
-    attach_file(csv)
+    Tempfile.open do |tmpfile|
+      write_csv(tmpfile)
+      attach_file(tmpfile)
+    end
   end
 
   private
 
-  def generate_csv
-    CSV.generate do |csv|
+  def write_csv(file)
+    CSV.open(file, "w") do |csv|
       csv << attribute_names
 
-      records.find_each do |record|
-        csv << serializer_class.new(record.decorated).as_csv
+      ApplicationRecord.uncached do
+        total_records = records.count
+        records.find_each.with_index do |record, index|
+          update_status_message!("#{format_number(index + 1)} of #{format_number(total_records, 'record')}") if (index % 500).zero?
+          csv << serializer_class.new(record.decorated).as_csv
+        end
+
+        update_status_message!("Exported #{format_number(total_records, 'record')}")
       end
     end
   end
 
-  def attribute_names
-    serializer_class.new(resource_class.new).headers
+  def format_number(number, singular = nil)
+    formatted_number = number_with_delimiter(number)
+    return formatted_number if singular.blank?
+
+    pluralize(formatted_number, singular)
+  end
+
+  def update_status_message!(message)
+    export.update!(status_message: message)
   end
 
   def attach_file(csv)
     export.file.attach(
-      io: StringIO.new(csv),
+      io: csv,
       filename: export.name,
       content_type: "text/csv"
     )
+  end
+
+  def attribute_names
+    serializer_class.new(resource_class.new).headers
   end
 
   def records

@@ -1,0 +1,41 @@
+<table class="table table-bordered table-striped">
+  <thead>
+    <tr role="row">
+      <th>
+        Name
+      </th>
+      <th>
+        Region
+      </th>
+      <th>
+        Authentication mode
+      </th>
+      <th>
+        Created At
+      </th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <% resources.each do |sip_trunk| %>
+      <tr role="row" class="<%= cycle("odd", "even", name: "row_class") -%>">
+
+        <td>
+          <%= link_to(sip_trunk.name, polymorphic_path([:dashboard, sip_trunk])) %>
+        </td>
+
+        <td>
+          <%= sip_trunk.region.human_name %>
+        </td>
+
+        <td>
+          <%= sip_trunk.authentication_mode.humanize %>
+        </td>
+
+        <td>
+          <%= local_time(sip_trunk.created_at) %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

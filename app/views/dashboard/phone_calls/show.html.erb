@@ -1,7 +1,7 @@
 <%= page_title(title: "Phone Call") %>
 
 <div class="card-body">
-  <% phone_call = PhoneCallDecorator.new(@resource) %>
+  <% phone_call = @resource.decorated %>
   <%= show_for(phone_call) do |f| %>
     <%= f.attribute :id, label: "SID" do %>
       <code>
@@ -10,24 +10,40 @@
     <% end %>
 
     <% if policy(:account).show? %>
-      <%= f.attribute :account, value: external_link_to(phone_call.account.name, dashboard_account_path(phone_call.account)) %>
-    <% end %>
-
-    <% if policy(:phone_number).show? %>
-      <% if phone_call.phone_number.present? %>
-        <%= f.attribute :phone_number, value: external_link_to(phone_call.phone_number.number, dashboard_phone_number_path(phone_call.phone_number)) %>
+      <%= f.attribute(:account) do %>
+        <%= external_link_to(phone_call.account.name, dashboard_account_path(phone_call.account)) %>
       <% end %>
     <% end %>
 
-    <% if policy(:outbound_sip_trunk).show? %>
-      <% if phone_call.outbound_sip_trunk.present? %>
-        <%= f.attribute :outbound_sip_trunk, value: external_link_to(phone_call.outbound_sip_trunk.name, dashboard_outbound_sip_trunk_path(phone_call.outbound_sip_trunk)) %>
+    <%= f.association(:incoming_phone_number, label: "Phone number SID") do |incoming_phone_number| %>
+      <%= external_link_to(incoming_phone_number.id, dashboard_incoming_phone_number_path(incoming_phone_number)) %>
+    <% end %>
+
+    <% if policy(:sip_trunk).show? %>
+      <% if phone_call.sip_trunk.present? %>
+        <%= f.attribute(:sip_trunk) do %>
+          <%= external_link_to(phone_call.sip_trunk.name, dashboard_sip_trunk_path(phone_call.sip_trunk)) %>
+        <% end %>
       <% end %>
     <% end %>
 
-    <% if policy(:inbound_sip_trunk).show? %>
-      <% if phone_call.inbound_sip_trunk.present? %>
-        <%= f.attribute :inbound_sip_trunk, value: external_link_to(phone_call.inbound_sip_trunk.name, dashboard_outbound_sip_trunk_path(phone_call.inbound_sip_trunk)) %>
+    <% if policy(:event).index? %>
+      <%= f.attribute(:events) do %>
+        <%= external_link_to("View", dashboard_events_path(filter: { phone_call_id: phone_call.id }), title: "View events") %>
+      <% end %>
+    <% end %>
+
+    <% if policy(:tts_event).index? %>
+      <%= f.attribute(:tts_events) do %>
+        <%= external_link_to("View", dashboard_tts_events_path(filter: { phone_call_id: phone_call.id }), title: "View TTS events") %>
+      <% end %>
+    <% end %>
+
+    <% if policy(:balance_transaction).show? %>
+      <%= f.attribute(:balance_transaction) do %>
+        <% if f.object.balance_transaction.present? %>
+          <%= external_link_to(f.object.balance_transaction.id, dashboard_balance_transaction_path(f.object.balance_transaction)) %>
+        <% end %>
       <% end %>
     <% end %>
 
@@ -36,7 +52,7 @@
     <%= f.attribute :status, value: phone_call.status.humanize %>
     <%= f.attribute :direction, value: phone_call.direction.humanize %>
     <%= f.attribute :duration, value: pluralize(phone_call.duration, "seconds") %>
-    <%= f.attribute :price, value: phone_call.price_formatted %>
+    <%= f.attribute :price, value: phone_call.price_formatted(with_currency: true) %>
     <%= f.attribute :price_unit %>
     <%= f.attribute :voice_url %>
     <%= f.attribute :voice_method %>
@@ -47,6 +63,11 @@
     <% end %>
     <%= f.attribute :status_callback_url %>
     <%= f.attribute :status_callback_method %>
+
+    <% if phone_call.recordings.any? %>
+      <dt class="col-sm-3">Recordings</dt>
+      <dd><%= render "dashboard/recordings/collection", recordings: phone_call.recordings %></dd>
+    <% end %>
     <%= f.attribute :created_at, value: local_time(@resource.created_at) %>
     <%= f.attribute :updated_at, value: local_time(@resource.updated_at) %>
   <% end %>

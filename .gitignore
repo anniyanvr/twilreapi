@@ -57,3 +57,16 @@ terraform.tfstate.*
 /yarn-error.log
 yarn-debug.log*
 .yarn-integrity
+
+/app/assets/builds/*
+!/app/assets/builds/.keep
+
+/config/credentials/production.key
+
+/config/credentials/staging.key
+
+dump.rdb
+
+# 1password
+
+.op

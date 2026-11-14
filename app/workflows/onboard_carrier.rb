@@ -1,18 +1,27 @@
 class OnboardCarrier < ApplicationWorkflow
-  attr_reader :name, :country_code, :owner
+  attr_reader :name, :country_code, :owner_params, :restricted, :website, :subdomain, :billing_currency, :rating_engine_client
 
-  def initialize(params)
+  def initialize(**params)
+    super()
     @name = params.fetch(:name)
     @country_code = params.fetch(:country_code)
-    @owner = params.fetch(:owner)
+    @restricted = params.fetch(:restricted)
+    @subdomain = params.fetch(:subdomain)
+    @website = params.fetch(:website)
+    @owner_params = params.fetch(:owner)
+    @billing_currency = params.fetch(:billing_currency)
+    @rating_engine_client = params.fetch(:rating_engine_client) { RatingEngineClient.new }
   end
 
   def call
     ApplicationRecord.transaction do
       carrier = create_carrier
-      create_carrier_access_token(carrier)
-      invite_carrier_owner(carrier: carrier, **owner)
-      carrier
+      create_oauth_application(carrier)
+      owner = onboard_carrier_owner(carrier:, **owner_params)
+
+      rating_engine_client.upsert_charging_profile(carrier)
+
+      [ carrier, owner ]
     end
   end
 
@@ -20,30 +29,29 @@ class OnboardCarrier < ApplicationWorkflow
 
   def create_carrier
     Carrier.create!(
-      name: name,
-      country_code: country_code
+      name:,
+      country_code:,
+      website:,
+      subdomain:,
+      restricted:,
+      billing_currency:,
     )
   end
 
-  def create_carrier_access_token(carrier)
+  def create_oauth_application(carrier)
     OAuthApplication.create!(
       name: carrier.name,
       owner: carrier,
       redirect_uri: "urn:ietf:wg:oauth:2.0:oob",
       scopes: "carrier_api"
-    ) do |app|
-      Doorkeeper::AccessToken.create!(
-        application: app,
-        scopes: app.scopes
-      )
-    end
+    )
   end
 
-  def invite_carrier_owner(params)
-    User.invite!(
-      params.reverse_merge(
-        carrier_role: :owner
-      )
+  def onboard_carrier_owner(**params)
+    user_params = params.reverse_merge(
+      carrier_role: :owner
     )
+
+    user_params.key?(:password) ? User.create!(user_params) : User.invite!(user_params)
   end
 end

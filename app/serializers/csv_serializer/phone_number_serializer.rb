@@ -2,13 +2,27 @@ module CSVSerializer
   class PhoneNumberSerializer < ResourceSerializer
     def attributes
       super.merge(
-        "account_sid" => nil,
-        "number" => nil
+        "number" => nil,
+        "type" => nil,
+        "visibility" => nil,
+        "country" => nil,
+        "price" => nil,
+        "currency" => nil,
+        "region" => nil,
+        "locality" => nil,
+        "lata" => nil,
+        "rate_center" => nil,
+        "latitude" => nil,
+        "longitude" => nil
       )
     end
 
-    def account_sid
-      account_id
+    def country
+      iso_country_code
+    end
+
+    def region
+      iso_region_code&.upcase
     end
   end
 end

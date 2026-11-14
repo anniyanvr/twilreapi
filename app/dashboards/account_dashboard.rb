@@ -3,23 +3,44 @@ require "administrate/base_dashboard"
 class AccountDashboard < Administrate::BaseDashboard
   ATTRIBUTE_TYPES = {
     carrier: Field::BelongsTo,
-    outbound_sip_trunk: Field::BelongsTo.with_options(
-      transform_on_export: ->(field) { field.data&.id }
-    ),
-    phone_calls: Field::HasMany.with_options(sort_by: :sequence_number, direction: :desc),
-    phone_numbers: Field::HasMany,
+    sip_trunk: Field::BelongsTo,
     id: Field::String,
+    type: Field::String,
     name: Field::String,
-    created_at: Field::DateTime,
-    updated_at: Field::DateTime,
+    default_tts_voice: Field::String,
+    created_at: Field::LocalTime,
+    updated_at: Field::LocalTime,
     status: Field::String,
+    calls_per_second: Field::Number,
+    enqueued_calls: Field::Number.with_options(
+      getter: ->(field) {
+        OutboundCallsQueue.new(field.resource).size
+      }
+    ),
+    current_call_sessions: Field::JSON.with_options(
+      getter: ->(field) {
+        SomlengRegion::Region.all.each_with_object({}) do |region, result|
+          result[region.alias] = AccountCallSessionLimiter.new.session_count_for(region.alias, scope: field.resource.id)
+        end
+      }
+    ),
+    balance: Field::String.with_options(
+      getter: ->(field) {
+        GetAccountBalance.call(field.resource).format
+      }
+    ),
     allowed_calling_codes: Field::String,
-    metadata: Field::JSON.with_options(searchable: false)
+    metadata: Field::JSON.with_options(searchable: false),
+    billing_mode: Field::String,
+    billing_currency: Field::String,
+    billing_enabled: Field::Boolean,
+    tariff_plan_subscriptions: Field::HasMany
   }.freeze
 
   COLLECTION_ATTRIBUTES = %i[
     carrier
     name
+    type
     status
     created_at
   ].freeze
@@ -28,12 +49,20 @@ class AccountDashboard < Administrate::BaseDashboard
     carrier
     id
     name
+    type
     status
-    outbound_sip_trunk
+    calls_per_second
+    enqueued_calls
+    current_call_sessions
+    default_tts_voice
+    sip_trunk
+    billing_enabled
+    balance
+    billing_currency
+    billing_mode
+    tariff_plan_subscriptions
     created_at
     updated_at
-    phone_calls
-    phone_numbers
     allowed_calling_codes
     metadata
   ].freeze
@@ -41,6 +70,6 @@ class AccountDashboard < Administrate::BaseDashboard
   COLLECTION_FILTERS = {}.freeze
 
   def display_resource(account)
-    "Account: #{account.carrier.name} / #{account.name}"
+    account.name
   end
 end

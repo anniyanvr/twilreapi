@@ -2,6 +2,7 @@ class CreateEvent < ApplicationWorkflow
   attr_reader :eventable, :type, :event
 
   def initialize(eventable:, type:)
+    super()
     @eventable = eventable
     @type = type
   end
@@ -16,9 +17,9 @@ class CreateEvent < ApplicationWorkflow
 
   def create_event
     @event = Event.create!(
-      eventable: eventable,
-      carrier: carrier,
-      type: type,
+      eventable:,
+      carrier:,
+      type:,
       details: eventable.jsonapi_serializer_class.new(eventable.decorated).as_json
     )
   end

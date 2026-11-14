@@ -1,6 +1,10 @@
 class PhoneNumberPolicy < ApplicationPolicy
   def index?
-    true
+    managing_carrier?
+  end
+
+  def bulk_destroy?
+    manage?
   end
 
   def manage?

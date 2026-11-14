@@ -1,15 +1,23 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Somleng</title>
+    <title>
+      <% if app_request.carrier_subdomain_request? %>
+        <%= current_carrier.name %>
+      <% else %>
+        Somleng
+      <% end %>
+      <% if content_for?(:page_title) %>
+        - <%= yield(:page_title) %>
+      <% end %>
+    </title>
     <meta name="viewport" content="width=device-width,initial-scale=1.0">
 
     <%= csrf_meta_tags %>
     <%= csp_meta_tag %>
 
-    <%= stylesheet_link_tag 'application', media: 'all', 'data-turbolinks-track': 'reload' %>
-    <%= stylesheet_pack_tag 'application', 'data-turbolinks-track': 'reload' %>
-    <%= javascript_pack_tag 'application', 'data-turbolinks-track': 'reload' %>
+    <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
+    <%= javascript_include_tag "application", "data-turbo-track": "reload", defer: true %>
 
     <%= render "shared/favicon" %>
   </head>
@@ -18,12 +26,23 @@
     <div class="container">
       <div class="row justify-content-center">
         <div class="col-md-6">
-          <%= image_tag "logo.png", class: "img-fluid mx-auto px-5 my-3 d-block" %>
+          <% if app_request.carrier_subdomain_request? %>
+            <%= carrier_logo(current_carrier, class: "img-fluid mx-auto px-5 my-3 d-block w-50") %>
+          <% else %>
+            <%= image_tag "logo.png", class: "img-fluid mx-auto px-5 my-3 d-block w-50" %>
+          <% end %>
 
           <div class="card-group">
             <div class="card p-4">
               <div class="card-body">
+                <% if content_for?(:page_title) %>
+                  <h2 class="card-title text-center">
+                    <%= yield(:page_title) %>
+                  </h2>
+                <% end %>
+
                 <%= render "shared/alerts" %>
+                <%= yield(:flash) if content_for?(:flash) %>
 
                 <%= yield %>
               </div>

@@ -1,0 +1,83 @@
+<table class="table table-bordered table-striped">
+  <thead>
+    <tr role="row">
+      <th>
+        ID
+      </th>
+      <th>
+        Broadcaster
+      </th>
+      <th>
+        Channel
+      </th>
+      <th>
+        Message
+      </th>
+      <th>
+        Status
+      </th>
+      <th>
+        Received at
+      </th>
+      <th>
+        Started at
+      </th>
+      <th>
+        Completed at
+      </th>
+    </tr>
+  </thead>
+
+  <tbody>
+    <% @broadcasts.each do |broadcast| %>
+      <tr role="row" class="<%= cycle("odd", "even", name: "row_class") -%>">
+        <td>
+          <%= link_to(broadcast.id, dashboard_broadcast_path(broadcast.id)) %>
+        </td>
+
+        <td>
+          <%= broadcast.broadcaster %>
+        </td>
+
+        <td>
+          <span class="badge <%= broadcast_badge(broadcast.channel).color %>">
+            <i class="icon fa-solid fa-<%= broadcast_badge(broadcast.channel).icon %>"></i>
+            <%= broadcast.channel.humanize %>
+          </span>
+        </td>
+
+        <td>
+          <strong><%= broadcast.headline %></strong><br/>
+          <%= broadcast.message %>
+        </td>
+
+        <td>
+          <span class="badge <%= broadcast_badge(broadcast.status).color %>">
+            <i class="icon fa-solid fa-<%= broadcast_badge(broadcast.status).icon %>"></i>
+            <%= broadcast.status.text %>
+          </span>
+        </td>
+
+        <td>
+          <%= local_time(broadcast.received_at) %>
+        </td>
+
+        <td>
+          <%= local_time(broadcast.started_at) %>
+          <% if broadcast.started_at.present? %>
+            by
+            <strong><%= broadcast.started_by %></strong>
+          <% end %>
+        </td>
+
+        <td>
+          <%= local_time(broadcast.completed_at) %>
+          <% if broadcast.completed_at.present? %>
+            by
+            <strong><%= broadcast.completed_by %></strong>
+          <% end %>
+        </td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>

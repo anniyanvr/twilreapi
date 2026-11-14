@@ -2,6 +2,7 @@ module TwilioAPI
   class PhoneCallSerializer < ResourceSerializer
     def attributes
       super.merge(
+        account_sid: nil,
         annotation: nil,
         answered_by: nil,
         caller_name: nil,
@@ -25,6 +26,14 @@ module TwilioAPI
       )
     end
 
+    def account_sid
+      account_id
+    end
+
+    def phone_number_sid
+      incoming_phone_number_id
+    end
+
     def annotation; end
 
     def answered_by; end
@@ -39,7 +48,9 @@ module TwilioAPI
 
     def group_sid; end
 
-    def parent_call_sid; end
+    def parent_call_sid
+      parent_call_id
+    end
 
     def start_time
       format_time(call_data_record.start_time)
@@ -50,7 +61,15 @@ module TwilioAPI
     end
 
     def uri
-      url_helpers.twilio_api_account_phone_call_url(account, __getobj__, format: :json, subdomain: "api")
+      url_helpers.api_twilio_account_phone_call_path(account, object, format: :json)
+    end
+
+    def collection_name
+      "calls"
+    end
+
+    def price
+      object.price_formatted
     end
   end
 end

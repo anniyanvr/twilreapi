@@ -5,7 +5,7 @@ RSpec.describe "Twilio API Authentication" do
     account = create(:account)
 
     post(
-      twilio_api_account_phone_calls_path(account)
+      api_twilio_account_phone_calls_path(account)
     )
 
     expect(response.code).to eq("401")
@@ -18,7 +18,7 @@ RSpec.describe "Twilio API Authentication" do
     account = create(:account)
 
     post(
-      twilio_api_account_phone_calls_path(account),
+      api_twilio_account_phone_calls_path(account),
       headers: build_authorization_headers("account", "wrong-password")
     )
 
@@ -30,7 +30,7 @@ RSpec.describe "Twilio API Authentication" do
     account = create(:account)
 
     post(
-      twilio_api_account_phone_calls_path(account),
+      api_twilio_account_phone_calls_path(account),
       headers: build_authorization_headers("wrong-account-id", account.auth_token)
     )
 
@@ -39,13 +39,27 @@ RSpec.describe "Twilio API Authentication" do
 
   it "denies access to a disabled account" do
     account = create(:account, :disabled)
-    phone_call = create(:phone_call, account: account)
+    phone_call = create(:phone_call, account:)
 
     get(
-      twilio_api_account_phone_call_path(account, phone_call),
+      api_twilio_account_phone_call_path(account, phone_call),
       headers: build_api_authorization_headers(account)
     )
 
     expect(response.code).to eq("401")
+    expect(json_response(response.body).fetch("message")).to eq("Account suspended")
+  end
+
+  it "denies access for carriers that are not in good standing" do
+    carrier = create_restricted_carrier
+    account = create(:account, carrier:)
+
+    get(
+      api_twilio_account_phone_calls_path(account),
+      headers: build_api_authorization_headers(account)
+    )
+
+    expect(response.code).to eq("401")
+    expect(json_response(response.body).fetch("message")).to eq("Carrier is not in good standing")
   end
 end

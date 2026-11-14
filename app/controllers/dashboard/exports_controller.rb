@@ -7,7 +7,7 @@ module Dashboard
     def create
       @resource = build_export
       @resource.save!
-      ExecuteWorkflowJob.perform_later("ExportCSV", @resource)
+      ExportCSVJob.perform_later(@resource)
 
       redirect_back(
         fallback_location: dashboard_exports_path,
@@ -22,10 +22,10 @@ module Dashboard
     def build_export
       @resource = Export.new(permitted_params)
       @resource.user = current_user
-      if current_organization.account?
-        @resource.scoped_to[:account_id] = current_account.id
-      else
+      if current_user.carrier_user?
         @resource.scoped_to[:carrier_id] = current_carrier.id
+      else
+        @resource.scoped_to[:account_id] = current_account.id
       end
       @resource
     end

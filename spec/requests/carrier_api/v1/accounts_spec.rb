@@ -11,6 +11,18 @@ resource "Accounts", document: :carrier_api do
         required: true
       )
       parameter(
+        :billing_enabled,
+        "Enable billing for the account. Defaults to `false`.",
+      )
+      parameter(
+        :billing_mode,
+        "The billing mode for the account. Only `prepaid` is supported at this time.",
+      )
+      parameter(
+        :tts_voice,
+        "The default TTS voice identifier. Defaults to: #{TTSVoices::Voice.default.identifier}"
+      )
+      parameter(
         :metadata,
         "Set of key-value pairs that you can attach to an object. This can be useful for storing additional information about the object in a structured format."
       )
@@ -19,12 +31,16 @@ resource "Accounts", document: :carrier_api do
     example "Create an account" do
       carrier = create(:carrier)
 
+      stub_rating_engine_request
       set_carrier_api_authorization_header(carrier)
       do_request(
         data: {
           type: :account,
           attributes: {
             name: "Rocket Rides",
+            default_tts_voice: "Basic.Kal",
+            billing_enabled: true,
+            billing_mode: "prepaid",
             metadata: {
               foo: "bar"
             }
@@ -34,8 +50,14 @@ resource "Accounts", document: :carrier_api do
 
       expect(response_status).to eq(201)
       expect(response_body).to match_jsonapi_resource_schema("carrier_api/account")
-      expect(jsonapi_response_attributes.fetch("name")).to eq("Rocket Rides")
-      expect(jsonapi_response_attributes.fetch("type")).to eq("carrier_managed")
+      expect(jsonapi_response_attributes).to include(
+        "name" => "Rocket Rides",
+        "type" => "carrier_managed",
+        "default_tts_voice" => "Basic.Kal",
+        "billing_enabled" => true,
+        "billing_mode" => "prepaid",
+        "metadata" => { "foo" => "bar" }
+      )
     end
 
     example "handles invalid requests", document: false do
@@ -67,8 +89,10 @@ resource "Accounts", document: :carrier_api do
     example "Update an account" do
       account = create(
         :account,
+        :billing_enabled,
         name: "Rocket Rides",
         status: :enabled,
+        default_tts_voice: "Basic.Slt",
         metadata: { "foo" => "bar" }
       )
 
@@ -83,6 +107,8 @@ resource "Accounts", document: :carrier_api do
           attributes: {
             name: "Bob Cats",
             status: "disabled",
+            billing_enabled: false,
+            default_tts_voice: "Basic.Kal",
             metadata: {
               "bar" => "foo"
             }
@@ -94,10 +120,40 @@ resource "Accounts", document: :carrier_api do
       expect(response_body).to match_jsonapi_resource_schema("carrier_api/account")
       expect(jsonapi_response_attributes).to include(
         "status" => "disabled",
+        "default_tts_voice" => "Basic.Kal",
+        "billing_enabled" => false,
         "metadata" => {
           "bar" => "foo",
           "foo" => "bar"
         }
+      )
+    end
+
+    example "Handles invalid requests", document: false do
+      account = create(:account, :customer_managed)
+
+      set_carrier_api_authorization_header(
+        account.carrier
+      )
+      do_request(
+        id: account.id,
+        data: {
+          type: :account,
+          id: account.id,
+          attributes: {
+            name: "Bob Cats",
+            default_tts_voice: "Basic.Kal"
+          }
+        }
+      )
+
+      expect(response_status).to eq(422)
+      expect(response_body).to match_api_response_schema("jsonapi_error")
+      expect(
+        json_response.fetch("errors").pluck("source").pluck("pointer")
+      ).to include(
+        "/data/attributes/name",
+        "/data/attributes/default_tts_voice"
       )
     end
   end
@@ -123,8 +179,8 @@ resource "Accounts", document: :carrier_api do
   get "https://api.somleng.org/carrier/v1/accounts" do
     example "List all accounts" do
       carrier = create(:carrier)
-      customer_managed_account = create(:account, :customer_managed, name: "Rocket Rides", carrier: carrier)
-      carrier_managed_account = create(:account, :carrier_managed, name: "Telco Net", carrier: carrier)
+      customer_managed_account = create(:account, :customer_managed, name: "Rocket Rides", carrier:)
+      carrier_managed_account = create(:account, :carrier_managed, name: "Telco Net", carrier:)
       _other_account = create(:account)
 
       set_carrier_api_authorization_header(carrier)
@@ -132,9 +188,43 @@ resource "Accounts", document: :carrier_api do
 
       expect(response_status).to eq(200)
       expect(response_body).to match_jsonapi_resource_collection_schema("carrier_api/account")
-      expect(json_response.fetch("data").pluck("id")).to match_array([customer_managed_account.id, carrier_managed_account.id])
-      expect(json_response.dig("data", 0, "attributes", "auth_token")).to eq(carrier_managed_account.auth_token)
-      expect(json_response.dig("data", 1, "attributes").has_key?("auth_token")).to eq(false)
+      expect(json_response.fetch("data").pluck("id")).to contain_exactly(
+        customer_managed_account.id, carrier_managed_account.id
+      )
+      expect(
+        json_response.dig(
+          "data", 0, "attributes",
+          "auth_token"
+        )
+      ).to eq(carrier_managed_account.auth_token)
+      expect(
+        json_response.dig("data", 1, "attributes").key?("auth_token")
+      ).to be(false)
+    end
+  end
+
+  delete "https://api.somleng.org/carrier/v1/accounts/:id" do
+    example "Delete an account" do
+      carrier = create(:carrier)
+      account = create(:account, carrier:)
+
+      stub_rating_engine_request
+      set_carrier_api_authorization_header(carrier)
+      do_request(id: account.id)
+
+      expect(response_status).to eq(204)
+    end
+
+    example "Delete an account with phone calls", document: false do
+      carrier = create(:carrier)
+      account = create(:account, carrier:)
+      create(:phone_call, account:)
+
+      set_carrier_api_authorization_header(carrier)
+      do_request(id: account.id)
+
+      expect(response_status).to eq(422)
+      expect(response_body).to match_api_response_schema("jsonapi_error")
     end
   end
 end

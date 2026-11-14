@@ -1,47 +1,88 @@
-FROM ruby:2.7-alpine AS build-env
+# syntax = docker/dockerfile:1
 
-ARG APP_ROOT="/app"
-ENV BUNDLE_APP_CONFIG="/app/.bundle"
+# Make sure RUBY_VERSION matches the Ruby version in .tool-versions
+ARG RUBY_VERSION=3.4
+FROM public.ecr.aws/docker/library/ruby:$RUBY_VERSION-alpine AS base
 
-RUN apk update && \
-    apk upgrade && \
-    apk add --update --no-cache build-base git postgresql-dev imagemagick nodejs yarn
+# Rails app lives here
+WORKDIR /rails
 
-RUN gem install bundler
+# Set production environment
+ENV RAILS_ENV="production" \
+    BUNDLE_DEPLOYMENT="1" \
+    BUNDLE_PATH="/usr/local/bundle" \
+    BUNDLE_WITHOUT="development test" \
+    BUNDLE_FORCE_RUBY_PLATFORM="1"
 
-RUN mkdir -p $APP_ROOT
-WORKDIR $APP_ROOT
+FROM public.ecr.aws/docker/library/alpine:latest AS binaries
 
-COPY Gemfile Gemfile.lock package.json yarn.lock $APP_ROOT/
+# Install packages needed to build binaries
+RUN apk update --no-cache && \
+    apk upgrade --no-cache && \
+    apk add --update --no-cache wget curl jq
 
-RUN bundle config --local deployment true && \
-    bundle config --local path "vendor/bundle" && \
-    bundle config --local without 'development test'
+RUN [[ "$(arch)" = "aarch64" ]] && arch="arm64" || arch="$(arch)" && \
+  curl -s https://api.github.com/repos/grpc-ecosystem/grpc-health-probe/releases/latest \
+  | jq ".assets[].browser_download_url" \
+  | grep "grpc_health_probe-linux-$arch" \
+  | tr -d '"' \
+  | wget -qi - -O grpc-health-probe && \
+  chmod +x grpc-health-probe && \
+  mv grpc-health-probe /usr/local/bin
 
-RUN bundle install --jobs 20 --retry 5
-RUN yarn install --frozen-lockfile
+# Throw-away build stage to reduce size of final image
+FROM base AS build
 
+# Install packages needed to build gems
+RUN apk update --no-cache && \
+    apk upgrade --no-cache && \
+    apk add --update --no-cache build-base git gcompat postgresql-dev nodejs yarn yaml-dev vips-dev libffi-dev
+
+# Install application gems
+COPY Gemfile Gemfile.lock ./
+
+RUN bundle install && \
+    rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git && \
+    find "${BUNDLE_PATH}" -name "*.o" -delete && find "${BUNDLE_PATH}" -name "*.c" -delete && \
+    mkdir -p tmp/pids && \
+    mkdir -p storage && \
+    mkdir -p log && \
+    bundle exec bootsnap precompile --gemfile
+
+COPY package.json yarn.lock .yarnrc.yml ./
+RUN yarn install
+
+# Copy application code
 COPY . .
 
-RUN bundle exec rails assets:precompile
+# Precompile bootsnap code for faster boot times
+RUN bundle exec bootsnap precompile app/ lib/
 
-RUN mkdir -p tmp/pids
-RUN rm -rf vendor/bundle/ruby/*/cache/ && find vendor/ -name "*.o" -delete && find vendor/ -name "*.c"
+# Precompiling assets for production without requiring secret RAILS_MASTER_KEY
+RUN SECRET_KEY_BASE_DUMMY=1 ./bin/rails assets:precompile
 
+# Final stage for app image
+FROM base
 
-FROM ruby:2.7-alpine
+# Install packages needed for deployment
+RUN apk update --no-cache && \
+    apk upgrade --no-cache && \
+    apk add --update --no-cache build-base gcompat postgresql-dev vips ffmpeg
 
-ARG APP_ROOT="/app"
-ENV BUNDLE_APP_CONFIG="/app/.bundle"
+# Copy built artifacts: gems, application
+# Note the trailing slashes are important here
+COPY --from=build --link /usr/local/bundle/ /usr/local/bundle/
+COPY --from=build --link /rails/ /rails/
+COPY --from=binaries --link /usr/local/bin/grpc-health-probe /usr/local/bin/
 
-WORKDIR $APP_ROOT
+# Run and own only the runtime files as a non-root user for security
+RUN addgroup -S -g 1000 rails && \
+    adduser -u 1000 -D -G rails rails && \
+    chown -R rails:rails db storage log tmp
 
-RUN apk update && \
-    apk upgrade && \
-    apk add --update --no-cache build-base postgresql-dev imagemagick && \
-    gem install bundler
+USER 1000:1000
+ENV RUBY_YJIT_ENABLE=true
 
-COPY --from=build-env $APP_ROOT $APP_ROOT
-
+# Start the server by default, this can be overwritten at runtime
 EXPOSE 3000
-CMD ["bundle", "exec", "puma", "-C", "config/puma.rb"]
+CMD ["./bin/rails", "server"]

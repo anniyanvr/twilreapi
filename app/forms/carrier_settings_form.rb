@@ -2,20 +2,56 @@ class CarrierSettingsForm
   include ActiveModel::Model
   include ActiveModel::Attributes
 
-  URL_FORMAT = /\A#{URI::DEFAULT_PARSER.make_regexp(%w[https])}\z/.freeze
+  COUNTRIES = ISO3166::Country.all.map(&:alpha2).freeze
+
+  class HostnameValidator < ActiveModel::EachValidator
+    RESTRICTED_DOMAINS = [
+      AppSettings.app_uri.domain
+    ].freeze
+
+    def validate_each(record, attribute, value)
+      return if value.blank?
+
+      if Addressable::URI.parse("//#{value}").domain.in?(RESTRICTED_DOMAINS)
+        return record.errors.add(attribute, :exclusion)
+      end
+
+      scope = options.fetch(:scope) { ->(_) { Carrier } }
+      record.errors.add(attribute, :taken) if scope.call(record).exists?(attribute => value)
+    rescue Addressable::URI::InvalidURIError
+      record.errors.add(attribute, :invalid)
+    end
+  end
 
   attribute :carrier
   attribute :name
   attribute :country
+  attribute :website
+  attribute :subdomain, SubdomainType.new
+  attribute :custom_app_host, HostnameType.new
+  attribute :custom_api_host, HostnameType.new
   attribute :logo
+  attribute :favicon
   attribute :webhook_url
   attribute :enable_webhooks, :boolean, default: true
+  attribute :default_tariff_package_id
+  attribute :api_allowed_ip_addresses, CommaSeparatedListType.new, default: []
 
   delegate :persisted?, :id, to: :carrier
 
   validates :name, presence: true
-  validates :country, inclusion: { in: ISO3166::Country.all.map(&:alpha2) }
-  validates :webhook_url, format: URL_FORMAT, allow_blank: true
+  validates :country, presence: true, inclusion: { in: COUNTRIES }
+  validates :website, presence: true, url_format: { allow_http: true, allow_blank: true }
+  validates :webhook_url, url_format: { allow_http: true }, allow_blank: true
+  validates :subdomain, presence: true,
+                        subdomain: { scope: ->(form) { Carrier.where.not(id: form.carrier.id) } }
+
+  validates :custom_app_host,
+            :custom_api_host,
+            hostname: { scope: ->(form) { Carrier.where.not(id: form.carrier.id) } }
+
+  validates :custom_api_host, comparison: { other_than: :custom_app_host, allow_blank: true }
+  validate :validate_api_allowed_ip_addresses
 
   def self.model_name
     ActiveModel::Name.new(self, nil, "CarrierSettings")
@@ -23,12 +59,19 @@ class CarrierSettingsForm
 
   def self.initialize_with(carrier)
     new(
-      carrier: carrier,
+      carrier:,
       name: carrier.name,
+      subdomain: carrier.subdomain,
+      website: carrier.website,
       country: carrier.country_code,
       logo: carrier.logo,
+      favicon: carrier.favicon,
       webhook_url: carrier.webhook_endpoint&.url,
-      enable_webhooks: carrier.webhooks_enabled?
+      enable_webhooks: carrier.webhooks_enabled?,
+      custom_app_host: carrier.custom_app_host,
+      custom_api_host: carrier.custom_api_host,
+      default_tariff_package_id: carrier.default_tariff_package_id,
+      api_allowed_ip_addresses: carrier.api_allowed_ip_addresses.pluck(:ip_address)
     )
   end
 
@@ -36,19 +79,30 @@ class CarrierSettingsForm
     return false if invalid?
 
     carrier.attributes = {
-      name: name,
-      country_code: country
+      name:,
+      website:,
+      subdomain:,
+      custom_app_host:,
+      custom_api_host:,
+      country_code: country,
+      default_tariff_package: (carrier.tariff_packages.find(default_tariff_package_id) if default_tariff_package_id.present?)
     }
 
     webhook_endpoint.enabled = enable_webhooks
     webhook_endpoint.url = webhook_url if webhook_url.present?
 
     carrier.logo.attach(logo) if logo.present?
+    carrier.favicon.attach(favicon) if favicon.present?
 
     Carrier.transaction do
+      carrier.oauth_application.api_allowed_ip_addresses = api_allowed_ip_addresses.map do |ip|
+        CarrierAPIAllowedIPAddress.new(ip_address: ip)
+      end
       carrier.save!
       webhook_endpoint.save! if update_webhook_endpoint?
     end
+
+    true
   end
 
   def webhook_configured?
@@ -59,13 +113,25 @@ class CarrierSettingsForm
     webhook_configured? && !carrier.webhook_endpoint.enabled?
   end
 
+  def tariff_packages_options_for_select
+    DecoratedCollection.new(carrier.tariff_packages).map { [ _1.name, _1.id ] }
+  end
+
   private
 
   def webhook_endpoint
-    @webhook_endpoint ||= carrier.webhook_endpoint || WebhookEndpoint.new(oauth_application: carrier.oauth_application)
+    @webhook_endpoint ||= carrier.webhook_endpoint || WebhookEndpoint.new(
+      oauth_application: carrier.oauth_application
+    )
   end
 
   def update_webhook_endpoint?
     webhook_configured? || webhook_url.present?
+  end
+
+  def validate_api_allowed_ip_addresses
+    Array(api_allowed_ip_addresses).each do |ip|
+      return errors.add(:api_allowed_ip_addresses, :invalid) unless Resolv::IPv4::Regex.match?(ip)
+    end
   end
 end

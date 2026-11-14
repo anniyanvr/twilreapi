@@ -1,8 +1,12 @@
-<link href="<%= asset_path("favicon/apple-touch-icon.png") %>" rel="apple-touch-icon" sizes="180x180"></link>
-<link href="<%= asset_path("favicon/favicon-32x32.png") %>" rel="icon" sizes="32x32" type="image/png"></link>
-<link href="<%= asset_path("favicon/favicon-16x16.png") %>" rel="icon" sizes="16x16" type="image/png"></link>
-<link color="#8bc730" href="<%= asset_path("favicon/safari-pinned-tab.svg") %>" rel="mask-icon"></link>
-<link href="<%= asset_path("favicon/favicon.ico") %>" rel="shortcut icon"></link>
-<meta content="#ffffff" name="msapplication-TileColor"/>
+<% if app_request.carrier_subdomain_request? %>
+  <link href="<%= carrier_favicon_url(app_request.find_carrier!) %>" rel="icon" sizes="32x32"></link>
+<% else %>
+  <link href="<%= asset_path("favicon/apple-touch-icon.png") %>" rel="apple-touch-icon" sizes="180x180"></link>
+  <link href="<%= asset_path("favicon/favicon-32x32.png") %>" rel="icon" sizes="32x32" type="image/png"></link>
+  <link href="<%= asset_path("favicon/favicon-16x16.png") %>" rel="icon" sizes="16x16" type="image/png"></link>
+  <link color="#8bc730" href="<%= asset_path("favicon/safari-pinned-tab.svg") %>" rel="mask-icon"></link>
+  <link href="<%= asset_path("favicon/favicon.ico") %>" rel="shortcut icon"></link>
+  <meta content="#ffffff" name="msapplication-TileColor"/>
 
-<meta content="#ffffff" name="theme-color"/>
+  <meta content="#ffffff" name="theme-color"/>
+<% end %>

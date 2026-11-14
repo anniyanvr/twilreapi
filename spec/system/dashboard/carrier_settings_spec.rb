@@ -2,41 +2,87 @@ require "rails_helper"
 
 RSpec.describe "Carrier Settings" do
   it "Update carrier settings" do
-    carrier = create(:carrier, :with_oauth_application, name: "My Carrier")
-    user = create(:user, :carrier, :owner, carrier: carrier)
+    carrier = create(
+      :carrier,
+      :with_oauth_application,
+      name: "My Carrier",
+      billing_currency: "USD"
+    )
+    create(
+      :carrier_api_allowed_ip_address,
+      oauth_application: carrier.oauth_application,
+      ip_address: "13.250.230.10/32"
+    )
+    user = create(:user, :carrier, :owner, carrier:)
+    create(:tariff_package, carrier:, name: "Standard Package")
 
-    sign_in(user)
+    carrier_sign_in(user)
     visit dashboard_carrier_settings_path
 
-    click_link("Edit")
+    click_on("Edit")
     fill_in("Name", with: "T-Mobile")
-    select("Zambia", from: "Country")
+    enhanced_select("United States", from: "Country", match: :first)
+    fill_in("Website", with: "https://t-mobile.example.com")
     fill_in("Webhook URL", with: "https://example.com/webhook_endpoint")
+    fill_in("API allowed IP addresses", with: "13.250.230.15, 13.250.230.16")
+    fill_in("Dashboard host", with: "dashboard.t-mobile.example.com")
+    fill_in("API host", with: "api.t-mobile.example.com")
     attach_file("Logo", file_fixture("carrier_logo.jpeg"))
-    click_button("Update Carrier Settings")
+    attach_file("Favicon", file_fixture("favicon-32x32.png"))
+    enhanced_select("Standard Package", from: "Default tariff package")
 
-    expect(page).to have_content("Carrier Settings were successfully updated")
-    expect(page).to have_content("T-Mobile")
-    expect(page).to have_content("Zambia")
-    expect(page).to have_content("https://example.com/webhook_endpoint")
-    expect(page).to have_content("Webhook signing secret")
+    click_on("Update Carrier Settings")
+
+    expect(page).to have_text("Carrier settings were successfully updated")
+    expect(page).to have_text("T-Mobile")
+    expect(page).to have_text("United States")
+    expect(page).to have_text("United States Dollar")
+    expect(page).to have_text("https://example.com/webhook_endpoint")
+    expect(page).to have_text("Webhook signing secret")
+    expect(page).to have_text("13.250.230.15, 13.250.230.16")
+    expect(page).to have_text("dashboard.t-mobile.example.com")
+    expect(page).to have_text("api.t-mobile.example.com")
+    expect(page).to have_xpath("//img[@title='Logo']")
+    expect(page).to have_xpath("//img[@title='Favicon']")
+    expect(page).to have_text("Standard Package")
+  end
+
+  it "Update carrier subdomain" do
+    carrier = create(:carrier, :with_oauth_application, subdomain: "t-mobile")
+    user = create(:user, :carrier, :owner, carrier:)
+
+    carrier_sign_in(user)
+    visit edit_dashboard_carrier_settings_path
+    fill_in("Subdomain", with: "t-mobile2")
+    click_on("Update Carrier Settings")
+
+    expect(page.current_host).to eq("http://t-mobile2.app.lvh.me")
+    expect(page).to have_current_path(new_user_session_path)
+
+    create(:carrier, subdomain: "t-mobile")
+    visit dashboard_root_url(subdomain: "t-mobile.app")
+    expect(page).to have_current_path(new_user_session_path)
   end
 
   it "Disable webhooks" do
     carrier = create(:carrier, :with_oauth_application)
-    create(:webhook_endpoint, oauth_application: carrier.oauth_application)
-    user = create(:user, :carrier, :owner, carrier: carrier)
+    create(
+      :webhook_endpoint,
+      oauth_application: carrier.oauth_application,
+      url: "https://www.example.com/webhooks"
+    )
+    user = create(:user, :carrier, :owner, carrier:)
 
-    sign_in(user)
+    carrier_sign_in(user)
     visit dashboard_carrier_settings_path
 
-    expect(page).to have_content("Webhook URL")
+    expect(page).to have_text("https://www.example.com/webhooks")
 
-    click_link("Edit")
+    click_on("Edit")
     uncheck("Enable webhooks")
-    click_button("Update Carrier Settings")
+    click_on("Update Carrier Settings")
 
-    expect(page).to have_content("Carrier Settings were successfully updated")
-    expect(page).not_to have_content("Webhook URL")
+    expect(page).to have_text("Carrier settings were successfully updated")
+    expect(page).to have_no_text("https://www.example.com/webhooks")
   end
 end

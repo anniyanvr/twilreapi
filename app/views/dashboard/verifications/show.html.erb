@@ -1,0 +1,56 @@
+<%= page_title(title: "Verification") %>
+
+<div class="card-body">
+  <% verification = @resource.decorated %>
+
+  <%= show_for(verification) do |f| %>
+    <%= page_sections_container do %>
+      <%= page_section("General") do %>
+        <%= f.attribute :id, label: "SID" do %>
+          <code>
+            <%= verification.id %>
+          </code>
+        <% end %>
+
+        <%= f.attribute :status do %>
+          <%= status_icon(verification.status_color) %>
+          <%= verification.status.humanize %>
+        <% end %>
+
+        <%= f.attribute :service do %>
+          <% if verification.verification_service.present? %>
+            <%= external_link_to(verification.verification_service.name, dashboard_verification_service_path(verification.verification_service)) %>
+          <% end %>
+        <% end %>
+
+        <% if policy(:account).show? %>
+          <%= f.attribute :account do %>
+            <% if verification.account.present? %>
+              <%= external_link_to(verification.account.name, dashboard_account_path(verification.account)) %>
+            <% end %>
+          <% end %>
+        <% end %>
+
+        <%= f.attribute :sent_to, value: verification.to_formatted %>
+
+        <%= f.attribute :country do %>
+          <%= verification.country.emoji_flag %>
+          <%= verification.country.iso_short_name %>
+        <% end %>
+
+        <%= f.attribute :locale %>
+        <%= f.attribute :created_at, value: local_time(verification.created_at) %>
+        <%= f.attribute :approved_at, value: local_time(verification.approved_at) %>
+        <%= f.attribute :expired_at, value: local_time(verification.expired_at) %>
+      <% end %>
+
+      <%= page_section("Delivery Attempts") do %>
+        <%= render("delivery_attempts", verification:) %>
+      <% end %>
+
+      <%= page_section("Verification Attempts") do %>
+        <%= render("verification_attempts", verification:) %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>

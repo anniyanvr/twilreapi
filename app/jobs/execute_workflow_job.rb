@@ -1,5 +1,5 @@
 class ExecuteWorkflowJob < ApplicationJob
-  def perform(workflow, *args)
-    workflow.constantize.call(*args)
+  def perform(workflow, ...)
+    workflow.safe_constantize.call(...)
   end
 end

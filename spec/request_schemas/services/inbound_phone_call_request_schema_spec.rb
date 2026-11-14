@@ -2,52 +2,211 @@ require "rails_helper"
 
 module Services
   RSpec.describe InboundPhoneCallRequestSchema, type: :request_schema do
-    it "validates source_ip" do
-      _inbound_sip_trunk = create(:inbound_sip_trunk, source_ip: "175.100.7.240")
+    it "validates inbound source_ip" do
+      _sip_trunk = create(:sip_trunk, inbound_source_ips: [ "175.100.7.240" ])
 
       expect(
-        validate_request_schema(input_params: { source_ip: "175.100.7.240" })
+        validate_request_schema(
+          input_params: {
+            source_ip: "175.100.7.240",
+            to: "85568308531"
+          }
+        )
       ).to have_valid_field(:source_ip)
 
       expect(
-        validate_request_schema(input_params: { source_ip: "175.100.7.241" })
-      ).not_to have_valid_field(:source_ip)
+        validate_request_schema(
+          input_params: {
+            source_ip: "175.100.7.241",
+            to: "85568308531"
+          }
+        )
+      ).not_to have_valid_schema(error_message: "175.100.7.241 doesn't exist")
+    end
+
+    it "validates client_identifier" do
+      sip_trunk = create(:sip_trunk, :client_credentials_authentication)
+
+      expect(
+        validate_request_schema(
+          input_params: {
+            source_ip: "127.0.0.1",
+            client_identifier: sip_trunk.username,
+            to: "85568308531"
+          }
+        )
+      ).to have_valid_field(:client_identifier)
+
+      expect(
+        validate_request_schema(
+          input_params: {
+            source_ip: "127.0.0.1",
+            client_identifier: "invalid-user",
+            to: "85568308531"
+          }
+        )
+      ).not_to have_valid_schema(error_message: "invalid-user doesn't exist")
     end
 
     it "validates to" do
       carrier = create(:carrier)
-      _inbound_sip_trunk = create(:inbound_sip_trunk, carrier: carrier, source_ip: "175.100.7.240")
-      _unassigned_phone_number = create(:phone_number, number: "855716100235", carrier: carrier)
-      _phone_number_assigned_to_account = create(:phone_number, :assigned_to_account, number: "855716100236", carrier: carrier)
+      account = create(:account, carrier:)
+      sip_trunk = create(:sip_trunk, carrier:, inbound_source_ips: "89.0.142.86")
+      configured_incoming_phone_number = create(
+        :incoming_phone_number, :fully_configured, account:
+      )
+      unconfigured_incoming_phone_number = create(
+        :incoming_phone_number, account:
+      )
 
       expect(
-        validate_request_schema(input_params: { to: "855716100236", source_ip: "175.100.7.240" })
+        validate_request_schema(
+          input_params: {
+            to: configured_incoming_phone_number.number.to_s,
+            source_ip: "89.0.142.86"
+          }
+        )
       ).to have_valid_field(:to)
 
       expect(
-        validate_request_schema(input_params: { to: "855716100235", source_ip: "175.100.7.240" })
-      ).not_to have_valid_field(:to)
+        validate_request_schema(
+          input_params: {
+            to: "85516701721", # unknown number
+            source_ip: "89.0.142.86"
+          }
+        )
+      ).not_to have_valid_schema(error_message: "Phone number 85516701721 does not exist")
 
       expect(
-        validate_request_schema(input_params: { to: "85516701721", source_ip: "175.100.7.240" })
-      ).not_to have_valid_field(:to)
+        validate_request_schema(
+          input_params: {
+            to: unconfigured_incoming_phone_number.number.to_s,
+            source_ip: "89.0.142.86"
+          }
+        )
+      ).not_to have_valid_schema(
+        error_message: "Phone number #{unconfigured_incoming_phone_number.number} is unconfigured"
+      )
+    end
+
+    it "validates account billing policy" do
+      carrier = create(:carrier)
+      account = create(:account, :billing_enabled, carrier:)
+      _sip_trunk = create(:sip_trunk, carrier:, inbound_source_ips: "89.0.142.86")
+      incoming_phone_number = create(:incoming_phone_number, :fully_configured, account:)
 
       expect(
-        validate_request_schema(input_params: { to: "855719999999", source_ip: "175.100.7.240" })
-      ).not_to have_valid_field(:to)
+        validate_request_schema(
+          input_params: {
+            to: incoming_phone_number.number.to_s,
+            from: "85568308531",
+            source_ip: "89.0.142.86",
+            external_id: "external-id",
+            host: "10.10.1.13",
+            region: "hydrogen"
+          }
+        )
+      ).not_to have_valid_schema(
+        error_message: ApplicationError::Errors.fetch(:subscription_disabled).message
+      )
+    end
+
+    it "validates carrier is in good standing" do
+      carrier = create_restricted_carrier
+      account = create(:account, carrier:)
+      _sip_trunk = create(:sip_trunk, carrier:, inbound_source_ips: "89.0.142.86")
+      incoming_phone_number = create(:incoming_phone_number, :fully_configured, account:)
+
+      expect(
+        validate_request_schema(
+          input_params: {
+            to: incoming_phone_number.number.to_s,
+            source_ip: "89.0.142.86"
+          }
+        )
+      ).not_to have_valid_schema(
+        error_message: ApplicationError::Errors.fetch(:carrier_standing).message
+      )
+    end
+
+    it "validates from" do
+      carrier = create(:carrier)
+      create(:sip_trunk, carrier:, inbound_source_ips: "89.0.142.86")
+      create(
+        :sip_trunk, carrier:, inbound_country_code: "MX", inbound_source_ips: "89.0.142.87"
+      )
+
+      expect(
+        validate_request_schema(
+          input_params: {
+            from: "abc",
+            source_ip: "89.0.142.86",
+            to: "85568308531"
+          }
+        )
+      ).not_to have_valid_field(:from)
+
+      expect(
+        validate_request_schema(
+          input_params: {
+            from: "8188888888",
+            source_ip: "89.0.142.86",
+            to: "85568308531"
+          }
+        )
+      ).not_to have_valid_field(:from)
+
+      expect(
+        validate_request_schema(
+          input_params: {
+            from: "018188888888",
+            source_ip: "89.0.142.87",
+            to: "85568308531"
+          }
+        )
+      ).to have_valid_field(:from)
+    end
+
+    it "validates sip trunk region" do
+      account = create(:account, :billing_enabled)
+      create(:sip_trunk, carrier: account.carrier, region: "helium", inbound_source_ips: "175.100.7.240")
+      create(:incoming_phone_number, account:, number: "85568308530")
+
+      expect(
+        validate_request_schema(
+          input_params: {
+            to: "+85568308530",
+            source_ip: "175.100.7.240"
+          }
+        )
+      ).not_to have_valid_schema(
+        error_message: ApplicationError::Errors.fetch(:region_not_supported).message
+      )
     end
 
     it "normalizes the output" do
       carrier = create(:carrier)
-      inbound_sip_trunk = create(:inbound_sip_trunk, carrier: carrier, source_ip: "175.100.7.240")
-      account = create(:account)
-      phone_number = create(:phone_number, account: account, carrier: carrier, number: "2442")
+      sip_trunk = create(:sip_trunk, :client_credentials_authentication, carrier:)
+      account = create(:account, carrier:)
+      incoming_phone_number = create(
+        :incoming_phone_number,
+        account:,
+        number: "12513095500",
+        voice_url: "https://demo.twilio.com/docs/voice.xml",
+        voice_method: "GET",
+        status_callback_url: "https://example.com/status-callback",
+        status_callback_method: "POST"
+      )
+
       schema = validate_request_schema(
         input_params: {
-          source_ip: "175.100.7.240",
-          to: "2442",
+          source_ip: "127.0.0.1",
+          client_identifier: sip_trunk.username,
+          to: "12513095500",
           from: "855716100230",
           external_id: "external-id",
+          host: "10.10.1.13",
+          region: "hydrogen",
           variables: {
             "sip_from_host" => "103.9.189.2"
           }
@@ -55,70 +214,113 @@ module Services
       )
 
       expect(schema.output).to include(
-        account: account,
-        to: "2442",
+        account:,
+        to: "12513095500",
         from: "855716100230",
         external_id: "external-id",
-        phone_number: phone_number,
-        inbound_sip_trunk: inbound_sip_trunk,
+        incoming_phone_number:,
+        phone_number: incoming_phone_number.phone_number,
+        sip_trunk:,
+        voice_url: "https://demo.twilio.com/docs/voice.xml",
+        voice_method: "GET",
+        status_callback_url: "https://example.com/status-callback",
+        status_callback_method: "POST",
+        call_service_host: "10.10.1.13",
+        region: "hydrogen",
         variables: {
           "sip_from_host" => "103.9.189.2"
         }
       )
     end
 
-    it "normalizes the from for accounts with a trunk prefix replacement" do
+    it "normalizes from with an inbound country configured" do
       carrier = create(:carrier)
-      _inbound_sip_trunk = create(
-        :inbound_sip_trunk,
-        carrier: carrier,
-        source_ip: "175.100.7.240",
-        trunk_prefix_replacement: "855"
+      account = create(:account, carrier:)
+      _sip_trunk = create(
+        :sip_trunk,
+        carrier:,
+        inbound_source_ips: "175.100.7.240",
+        inbound_country_code: "KH"
       )
-      _phone_number = create(:phone_number, :assigned_to_account, number: "855716100235", carrier: carrier)
+      _incoming_phone_number = create(
+        :incoming_phone_number,
+        type: :short_code,
+        number: "1294",
+        account:
+      )
       schema = validate_request_schema(
         input_params: {
           source_ip: "175.100.7.240",
-          to: "855716100235",
-          from: "0716100230",
-          external_id: "external-id"
+          to: "1294",
+          from: "068308531",
+          external_id: "external-id",
+          host: "10.10.1.13",
+          region: "hydrogen"
         }
       )
 
-      expect(schema.output).to include(from: "855716100230")
+      expect(schema.output).to include(from: "85568308531", to: "1294")
+    end
+
+    it "normalizes to with an inbound country configured" do
+      carrier = create(:carrier)
+      account = create(:account, carrier:)
+      _sip_trunk = create(
+        :sip_trunk,
+        carrier:,
+        inbound_source_ips: "175.100.7.240",
+        inbound_country_code: "LA"
+      )
+      _incoming_phone_number = create(
+        :incoming_phone_number,
+        number: "8562092960310",
+        account:
+      )
+      schema = validate_request_schema(
+        input_params: {
+          source_ip: "175.100.7.240",
+          to: "02092960310",
+          from: "02092960314",
+          external_id: "external-id",
+          host: "10.10.1.13",
+          region: "hydrogen"
+        }
+      )
+
+      expect(schema.output).to include(from: "8562092960314", to: "8562092960310")
     end
 
     it "normalizes the twiml for routing to a sip domain" do
       carrier = create(:carrier)
-      create(:inbound_sip_trunk, carrier: carrier, source_ip: "175.100.7.240")
-      account = create(:account)
-      create(
-        :phone_number,
-        account: account,
-        carrier: carrier,
+      account = create(:account, carrier:)
+      create(:sip_trunk, carrier:, inbound_source_ips: "89.0.142.86")
+      incoming_phone_number = create(
+        :incoming_phone_number,
+        account:,
         number: "2442",
-        voice_url: nil,
-        voice_method: nil,
+        type: :short_code,
         sip_domain: "example.sip.twilio.com"
       )
       schema = validate_request_schema(
         input_params: {
-          source_ip: "175.100.7.240",
-          to: "2442",
+          source_ip: "89.0.142.86",
+          to: incoming_phone_number.number.to_s,
           from: "855716100230",
-          external_id: "external-id"
+          external_id: "external-id",
+          host: "10.10.1.13",
+          region: "hydrogen"
         }
       )
 
       expect(schema.output).to include(
         voice_url: nil,
-        voice_method: nil,
         twiml: include("sip:2442@example.sip.twilio.com")
       )
     end
 
-    def validate_request_schema(options)
-      InboundPhoneCallRequestSchema.new(options)
+    def validate_request_schema(input_params: {}, options: {})
+      options.reverse_merge!(error_log_messages: ErrorLogMessages.new)
+      InboundPhoneCallRequestSchema.new(input_params:, options:)
     end
   end
 end

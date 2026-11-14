@@ -13,7 +13,56 @@ en:
     dashboard:
       account_settings:
         update:
-          notice: "Account Settings were successfully updated."
+          notice: Account settings were successfully updated.
+      auth_tokens:
+        destroy:
+          notice: Auth token was successfully revoked.
+      carrier_api_keys:
+        destroy:
+          notice: API key was successfully revoked.
       carrier_settings:
         update:
-          notice: "Carrier Settings were successfully updated."
+          notice: Carrier settings were successfully updated.
+      notification_preferences:
+        update:
+          notice: Notification preferences were successfully updated.
+      sms_gateway_channels:
+        create:
+          notice: Channel was successfully created.
+        update:
+          notice: Channel was successfully updated.
+        destroy:
+          notice: Channel was successfully destroyed.
+          alert: Channel could not be destroyed.
+      sms_gateway_channel_groups:
+        create:
+          notice: Channel group was successfully created.
+        update:
+          notice: Channel group was successfully updated.
+        destroy:
+          notice: Channel group was successfully destroyed.
+          alert: Channel group could not be destroyed.
+      alphanumeric_sender_ids:
+        create:
+          notice: Alphanumeric Sender ID was successfully requested.
+        destroy:
+          notice: Alphanumeric Sender ID was successfully destroyed.
+        update:
+          notice: Alphanumeric Sender ID was successfully updated.
+      phone_numbers:
+        bulk_destroy:
+          notice: Phone numbers were successfully destroyed.
+      incoming_phone_numbers:
+        update:
+          notice: Phone number configuration was successfully updated.
+        destroy:
+          notice: Phone number was successfully released.
+      phone_number_plans:
+        destroy:
+          notice: "Phone number plan was successfully canceled."
+      custom_domains:
+        regenerate:
+          notice: "%{resource_name} was successfully regenerated."
+      messaging_services:
+        create:
+          notice: ""

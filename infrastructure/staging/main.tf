@@ -1,0 +1,48 @@
+module "somleng" {
+  source = "../modules/somleng"
+
+  app_identifier     = "somleng-staging"
+  app_environment    = "staging"
+  app_subdomain      = "app-staging"
+  cdn_subdomain      = "cdn-staging"
+  api_subdomain      = "api-staging"
+  services_subdomain = "services-staging"
+  verify_subdomain   = "verify-staging"
+  anycable_subdomain = "anycable-staging"
+
+  rating_engine_identifier = "rating-engine-staging"
+
+  app_image             = data.terraform_remote_state.core.outputs.app_ecr_repository
+  nginx_image           = data.terraform_remote_state.core.outputs.nginx_ecr_repository
+  aws_ses_region        = "us-east-1"
+  region                = data.terraform_remote_state.core_infrastructure.outputs.hydrogen_region
+  global_accelerator    = data.terraform_remote_state.core_infrastructure.outputs.global_accelerator
+  route53_zone          = data.terraform_remote_state.core_infrastructure.outputs.route53_zone_somleng_org
+  internal_route53_zone = data.terraform_remote_state.core_infrastructure.outputs.route53_zone_internal_somleng_org
+
+  cdn_certificate = data.terraform_remote_state.core_infrastructure.outputs.cdn_certificate
+
+  uploads_bucket = "uploads-staging.somleng.org"
+
+  db_name                   = "somleng_staging"
+  db_username               = data.terraform_remote_state.core_infrastructure.outputs.db_staging.this.master_username
+  db_password_parameter_arn = data.terraform_remote_state.core_infrastructure.outputs.db_staging.master_password_parameter.arn
+  db_host                   = data.terraform_remote_state.core_infrastructure.outputs.db_staging.this.endpoint
+  db_port                   = data.terraform_remote_state.core_infrastructure.outputs.db_staging.this.port
+  db_instance_identifier    = data.terraform_remote_state.core_infrastructure.outputs.db_staging.this.id
+
+  call_service_queue_name = "switch-services-staging"
+  rails_log_level         = "debug"
+
+  appserver_min_tasks = 0
+  appserver_max_tasks = 1
+  worker_min_tasks    = 0
+  worker_max_tasks    = 1
+  anycable_min_tasks  = 0
+  anycable_max_tasks  = 1
+  ws_min_tasks        = 0
+  ws_max_tasks        = 1
+  autoscale_worker    = false
+
+  raw_recordings_bucket_name = "raw-recordings-staging.somleng.org"
+}

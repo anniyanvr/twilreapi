@@ -1,60 +1,57 @@
-import { Controller } from "stimulus"
-import $ from "jquery";
-import "daterangepicker/daterangepicker.js"
-import moment from "moment"
+import { Controller } from "@hotwired/stimulus";
 
-const FORMAT = "DD/MM/YYYY"
+import AirDatepicker from "air-datepicker";
+import localeEn from "air-datepicker/locale/en";
 
 export default class extends Controller {
-  static targets = ["dateRangePicker", "fromDate", "toDate"]
+  static targets = ["dateRangePicker", "fromDate", "toDate"];
 
   connect() {
-    $(this.dateRangePickerTarget).daterangepicker({
-      autoApply: true,
-      opens: 'left',
-      locale: {
-        format: FORMAT,
-        separator: " to ",
-        cancelLabel: 'Reset'
+    const datePickerOptions = {
+      container: "#filters",
+      locale: localeEn,
+      range: true,
+      buttons: ["clear"],
+      toggleSelected: false,
+      multipleDatesSeparator: "-",
+      autoClose: true,
+      onSelect: ({ date, formattedDate }) => {
+        if (formattedDate.length == 0) return;
+        if (formattedDate.length == 1) {
+          if ("maxDateRangeMonths" in this.dateRangePickerTarget.dataset) {
+            const maxDateRangeMonths = parseInt(
+              this.dateRangePickerTarget.dataset.maxDateRangeMonths
+            );
+            let selectedDate = date[0];
+            let minDate = new Date(selectedDate);
+            let maxDate = new Date(selectedDate);
+            minDate.setMonth(selectedDate.getMonth() - maxDateRangeMonths);
+            maxDate.setMonth(selectedDate.getMonth() + maxDateRangeMonths);
+            picker.update({ minDate: minDate, maxDate: maxDate });
+          }
+
+          formattedDate.push(formattedDate[0]);
+        }
+
+        const [fromDate, toDate] = formattedDate;
+        this.fromDateTarget.value = new Date(fromDate).toISOString();
+        this.toDateTarget.value = new Date(toDate).toISOString();
       },
-      ranges: {
-        'Today': [moment(), moment()],
-        'Yesterday': [moment().subtract(1, 'days'), moment().subtract(1, 'days')],
-        'Last 7 Days': [moment().subtract(6, 'days'), moment()],
-        'Last 30 Days': [moment().subtract(29, 'days'), moment()],
-        'This Month': [moment().startOf('month'), moment().endOf('month')],
-        'Last Month': [moment().subtract(1, 'month').startOf('month'), moment().subtract(1, 'month').endOf('month')]
-      }
-    })
+    };
 
-    // after calling daterangepicker function to prevent closing parent Bootstrap dropdown
-    $("div.daterangepicker").on("click", (e) => {
-      e.stopPropagation()
-    })
-
-    if(this.validateDates(this.fromDateTarget.value, this.toDateTarget.value)) {
-      let pickerData = $(this.dateRangePickerTarget).data("daterangepicker")
-
-      pickerData.setStartDate(this.fromDateTarget.value)
-      pickerData.setEndDate(this.toDateTarget.value)
-    } else {
-      this.dateRangePickerTarget.value = ""
+    if (this.fromDateTarget.value && this.toDateTarget.value) {
+      datePickerOptions.selectedDates = [
+        this.fromDateTarget.value,
+        this.toDateTarget.value,
+      ];
     }
 
-    $(this.dateRangePickerTarget).on("apply.daterangepicker", (event, picker) => {
-      this.fromDateTarget.value = picker.startDate.format(FORMAT)
-      this.toDateTarget.value   = picker.endDate.format(FORMAT)
-    })
+    const picker = new AirDatepicker(
+      this.dateRangePickerTarget,
+      datePickerOptions
+    );
 
-    $(this.dateRangePickerTarget).on("cancel.daterangepicker", () => {
-      this.dateRangePickerTarget.value = ""
-
-      $(this.fromDateTarget).remove()
-      $(this.toDateTarget).remove()
-    })
-  }
-
-  validateDates(fromDate, toDate){
-    return moment(fromDate, FORMAT).isValid() && moment(toDate, FORMAT).isValid()
+    // after calling AirDatepicker function to prevent closing parent Bootstrap dropdown
+    picker.$datepicker.addEventListener("click", (e) => e.stopPropagation());
   }
 }

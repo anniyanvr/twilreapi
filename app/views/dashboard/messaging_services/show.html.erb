@@ -1,0 +1,69 @@
+<%= page_title(title: "Messaging Service") do %>
+  <% if policy(@resource).edit? %>
+    <%= render("shared/edit_resource_page_action", path: edit_dashboard_messaging_service_path(@resource)) %>
+  <% end %>
+
+  <% if policy(@resource).destroy? %>
+    <%= render("shared/destroy_resource_page_action", path: dashboard_messaging_service_path(@resource)) %>
+  <% end %>
+<% end %>
+
+<div class="card-body">
+  <%= page_sections_container do %>
+    <%= page_section("Properties") do %>
+      <%= show_for(@resource.decorated) do |f| %>
+        <%= f.attribute :id, label: "SID" do %>
+          <code>
+            <%= f.object.id %>
+          </code>
+        <% end %>
+
+        <%= f.attribute :name %>
+
+        <% if policy(:account).show? %>
+          <%= f.attribute(:account) do %>
+            <%= external_link_to(@resource.account.name, dashboard_account_path(@resource.account)) %>
+          <% end %>
+        <% end %>
+
+        <%= f.attribute :created_at, value: local_time(@resource.created_at) %>
+        <%= f.attribute :updated_at, value: local_time(@resource.updated_at) %>
+      <% end %>
+    <% end %>
+
+    <%= page_section("Sender Pool") do %>
+      <%= show_for(@resource.decorated) do |f| %>
+        <%= f.attribute(:incoming_phone_numbers) do %>
+          <%= summarize_list(
+            DecoratedCollection.new(f.object.sender_pool.incoming_phone_numbers).map { external_link_to(it.number_formatted, dashboard_incoming_phone_number_path(it)) },
+            max: 3,
+            link_to_remaining: dashboard_incoming_phone_numbers_path(filter: { messaging_service_id: f.object.id })
+          ) %>
+        <% end %>
+
+        <%= f.attribute(:alphanumeric_sender_ids, content_html: { id: "alphanumeric-sender-ids" }) do %>
+          <%= summarize_list(
+            DecoratedCollection.new(f.object.sender_pool.alphanumeric_sender_ids).map { external_link_to(it.sender_id, dashboard_alphanumeric_sender_id_path(it)) },
+            max: 3,
+            link_to_remaining: dashboard_alphanumeric_sender_ids_path(filter: { messaging_service_id: f.object.id })
+          ) %>
+        <% end %>
+      <% end %>
+    <% end %>
+
+    <%= page_section("Integration") do %>
+      <%= show_for(@resource.decorated) do |f| %>
+        <%= f.attribute :inbound_message_behavior, value: f.object.inbound_message_behavior.humanize %>
+        <%= f.attribute :inbound_request_url %>
+        <%= f.attribute :inbound_request_method %>
+        <%= f.attribute :status_callback_url %>
+      <% end %>
+    <% end %>
+
+    <%= page_section("Content Settings") do %>
+      <%= show_for(@resource.decorated) do |f| %>
+        <%= f.attribute(:smart_encoding, content_html: { id: "smart-encoding" }) %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>

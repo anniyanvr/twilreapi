@@ -1,10 +1,10 @@
 module Dashboard
   class HomeController < DashboardController
     def show
-      if current_organization.account?
-        redirect_to(dashboard_account_settings_path)
-      elsif current_organization.carrier?
-        redirect_to(dashboard_carrier_settings_path)
+      if current_user.carrier_user?
+        redirect_to(dashboard_carrier_settings_path, status: :see_other)
+      else
+        redirect_to(dashboard_account_settings_path, status: :see_other)
       end
     end
   end

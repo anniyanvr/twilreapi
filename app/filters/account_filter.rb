@@ -13,7 +13,7 @@ class AccountFilter < ResourceFilter
 
   class TypeFilter < ApplicationFilter
     filter_params do
-      optional(:type).value(:string, included_in?: Account::TYPES)
+      optional(:type).value(:string, included_in?: Account.type.values)
     end
 
     def apply
@@ -25,6 +25,18 @@ class AccountFilter < ResourceFilter
       when "customer_managed"
         super.merge(Account.customer_managed)
       end
+    end
+  end
+
+  class TariffPlanIDFilter < ApplicationFilter
+    filter_params do
+      optional(:tariff_plan_id).value(:string)
+    end
+
+    def apply
+      return super if filter_params.blank?
+
+      super.joins(:tariff_plans).where(tariff_plans: { id: filter_params.fetch(:tariff_plan_id) })
     end
   end
 
@@ -47,9 +59,16 @@ class AccountFilter < ResourceFilter
       value = filter_params.dig(:metadata, :value)
       keys = key.split(".").join(",")
 
-      super.where("metadata #>> :key = :value", key: "{#{keys}}", value: value)
+      super.where("metadata #>> :key = :value", key: "{#{keys}}", value:)
     end
   end
 
-  filter_with IDFilter, StatusFilter, TypeFilter, DateFilter, MetadataFilter
+  filter_with(
+    StatusFilter,
+    TypeFilter,
+    TariffPlanIDFilter,
+    MetadataFilter,
+    :id_filter,
+    :date_filter
+  )
 end

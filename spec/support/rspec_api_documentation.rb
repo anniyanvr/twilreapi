@@ -3,9 +3,9 @@ require "rspec_api_documentation/dsl"
 RspecApiDocumentation.configure do |config|
   config.api_name = "Somleng API Documentation"
 
-  config.format = [:slate]
+  config.format = [ :somleng_slate ]
   config.curl_host = ""
-  config.curl_headers_to_filter = %w[Host Cookie]
+  config.curl_headers_to_filter = %w[Host Cookie Version]
 
   config.request_headers_to_include = []
   config.response_headers_to_include = []
@@ -27,16 +27,14 @@ RspecApiDocumentation.configure do |config|
     conf.api_explanation = <<~HEREDOC
       # Introduction
 
-      Somleng is an Open Source Cloud Communications Platform as a Service (CPaaS). It contains an open source implementation of [Twilio's REST API](https://www.twilio.com/docs/voice/api).
-      Currently it only supports a tiny subset of Twilio's REST API. More features may be added in the future.
+      Dive into our full API Reference Documentation and seamlessly integrate Voice and SMS functionalities into your website or application.
+      This API uses HTTP verbs and a RESTful endpoint structure. Your Account SID and Auth Token is used as the API Authorization framework.
+      Request and response payloads are formatted as JSON using UTF-8 encoding and URL encoded values.
 
-      This API documentation is intended for users of the REST API.
-
-      ## Make an HTTP Request to Somleng
+      ## Make an HTTP Request
 
       There are a lot of ways you can make an HTTP request to Somleng.
-      You can make a raw HTTP request in your code (for example, using a module like [got in NodeJS](https://www.npmjs.com/package/got)) or by using a tool like [Postman](https://www.postman.com/).
-      You might find it easier to use the [Twilio Helper Library or SDK](https://www.twilio.com/docs/libraries) for your preferred programming language. These libraries can be usually be used with Somleng by overriding the URL parameter from `api.twilio.com` to `api.somleng.org` or that of your own host.
+      You can use a [Helper Library or SDK](#helper-libraries) for your preferred programming language or you can make a raw HTTP request in your code by using a tool like [Postman](https://www.postman.com/).
 
       ## Credentials
 
@@ -49,6 +47,34 @@ RspecApiDocumentation.configure do |config|
       | Username   | Password  |
       | ---------- | --------- |
       | AccountSid | AuthToken |
+
+      ### Store Your Somleng Credentials Securely
+
+      It's important to keep credentials such as your Somleng Account SID and Auth token secure by storing them in a way that prevents unauthorized access.
+      One common method is to store them in environment variables which are then accessed from your app.
+      This keeps them out of code and other places where credentials don't belong.
+
+      On the right is an example in Node.js ---->
+
+      ```js
+      const accountSid = process.env.SOMLENG_ACCOUNT_SID;
+      const authToken = process.env.SOMLENG_AUTH_TOKEN;
+      const client = require('somleng')(accountSid, authToken);
+
+      // Make API calls here...
+      ```
+
+      ## Helper Libraries
+
+      The following is a list of officially supported helper libraries for Somleng. Please refer to the documentation in each library for more details.
+
+      * [somleng-node](https://github.com/somleng/somleng-node)
+
+      ## Demo Applications
+
+      The following is a list of demo applications which you can use to get started with Somleng.
+
+      * [Somleng Demo Next.js](https://github.com/somleng/somleng-demo-nextjs)
     HEREDOC
 
     conf.filter = :twilio_api
@@ -57,48 +83,9 @@ RspecApiDocumentation.configure do |config|
 
   config.define_group :carrier_api do |conf|
     conf.api_explanation = <<~HEREDOC
-      # Carrier Documentation
-
-      This documentation is intended for carriers. The documentation for Somleng's Open Source implementation of Twilio's REST API is available [here](../twilio_api).
-
-      ## Configuring Outbound SIP Trunks
-
-      To setup outbound dialing you create an Outbound SIP trunk(s) via the [Carrier Dashboard](https://dashboard.somleng.org).
-      When configuring an Outbound SIP trunk, you specify your host as either a fully qualified domain name (FQDN) or IP Address.
-      This tells Somleng to send outbound calls to your this host using the configured dial string.
-      Somleng will send SIP and RTP from NATed from the IP address below:
-
-      | NAT IP          |
-      | --------------- |
-      | `13.250.230.15` |
-
-      You should allow this IP address on your firewall.
-
-      ## Configuring Inbound SIP Trunks
-
-      To setup inbound dialing you create an Inbound SIP Trunk via the [Carrier Dashboard](https://dashboard.somleng.org).
-      When configuring an Inbound SIP trunk, you specify your source IP address from which you will send SIP from.
-      You can then send SIP to the following endpoints. We recommend that you use `sip.somleng.org` if possible for high-availability.
-
-      | Endpoint          |
-      | ---------------   |
-      | `sip.somleng.org` |
-      | `52.74.4.205`     |
-      | `18.136.239.28`   |
-      | `3.0.30.251`      |
-
-      ## RTP
-
-      RTP from Somleng is sent through a NAT Gateway. This means that the ports specified in the SDP in the SIP Invite from Somleng are unreachable.
-      In order to work-around this problem, it is required that you setup [Symmetric Latching](https://github.com/somleng/somleng-switch/wiki/SIP-NAT) on your device/software.
-
-      Symmetric RTP means that the IP address and port pair used by an outbound RTP flow is reused for the inbound flow.
-      The IP address and port are learned when the initial RTP flow is received on your device. The flow's source address and port are latched onto and used
-      as the destination for the RTP sourced by the other side of the call. The IP address and port in the c line and m line respectively in the SDP message are ignored.
-
-      If your device does not support symmetric latching please contact us for assistance.
-
       # Carrier API
+
+      This documentation is intended for carriers as defined in the [carrier documentation](https://www.somleng.org/carrier_documentation.html). The API documentation for Somleng's Open Source implementation of Twilio's REST API is available [here](../twilio_api).
 
       The Carrier API is intended for carriers who need to automate provisioning of carrier resources (e.g. Accounts) rather that using the dashboard.
       This API is written according to the [JSON API Specification](https://jsonapi.org/). We recommend using a [JSON API Client](https://jsonapi.org/implementations/) for consuming this API.
@@ -115,7 +102,7 @@ RspecApiDocumentation.configure do |config|
 
       All requests are signed using [JSON Web Token (JWT)](https://jwt.io/) Bearer authentication, according to the HS256 (HMAC-SHA256) algorithm.
 
-      You should verify the events that Somleng sends to your Webhook endpoints. Here's an example in Ruby:
+      You should verify the events that Somleng sends to your Webhook endpoints. On the right is an example in Ruby ---->
 
       ```ruby
       JWT.decode(

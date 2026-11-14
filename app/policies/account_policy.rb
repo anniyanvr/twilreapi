@@ -1,16 +1,8 @@
 class AccountPolicy < ApplicationPolicy
   delegate :carrier_managed?, :customer_managed?, to: :record
 
-  def index?
-    read?
-  end
-
   def read?
-    user.current_organization.carrier?
-  end
-
-  def show_auth_token?
-    read? && record.carrier_managed?
+    user.carrier_user?
   end
 
   def manage?
@@ -18,6 +10,6 @@ class AccountPolicy < ApplicationPolicy
   end
 
   def destroy?
-    super && record.account_memberships.empty?
+    super && carrier_managed? && !record.messages.exists? && !record.phone_calls.exists?
   end
 end

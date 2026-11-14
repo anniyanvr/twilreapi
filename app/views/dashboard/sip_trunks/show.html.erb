@@ -1,0 +1,91 @@
+<%= page_title(title: "SIP Trunk") do %>
+  <% if policy(@resource).edit? %>
+    <%= render("shared/edit_resource_page_action", path: edit_dashboard_sip_trunk_path(@resource)) %>
+  <% end %>
+    <% if policy(@resource).destroy? %>
+    <%= render("shared/destroy_resource_page_action", path: dashboard_sip_trunk_path(@resource)) %>
+  <% end %>
+<% end %>
+
+<div class="card-body">
+  <%= show_for(@resource.decorated) do |f| %>
+    <%= page_sections_container do %>
+
+      <%= page_section("General") do %>
+        <%= f.attribute :name %>
+        <%= f.attribute :authentication_mode, value: f.object.authentication_mode.humanize %>
+        <%= f.attribute :max_channels do %>
+          <%= f.object.max_channels.present? ? f.object.max_channels : "Unlimited" %>
+        <% end %>
+        <%= f.attribute :region, value: f.object.region.human_name %>
+        <%= f.attribute :region_ip_address, value: f.object.region.nat_ip %>
+        <%= f.attribute :created_at, value: local_time(f.object.created_at) %>
+        <%= f.attribute :updated_at, value: local_time(f.object.updated_at) %>
+      <% end %>
+
+      <% if @resource.authentication_mode.client_credentials? %>
+        <%= page_section("Client Credentials") do %>
+          <%= f.attribute :username do %>
+            <code>
+              <%= f.object.username %>
+            </code>
+          <% end %>
+          <%= f.attribute :password do %>
+            <%= mask_content(f.object.password) %>
+          <% end %>
+          <%= f.attribute :domain do %>
+            <code>
+              <%= AppSettings.fetch(:client_gateway_domain) %>
+            </code>
+          <% end %>
+        <% end %>
+      <% end %>
+
+      <%= page_section("Inbound Dialing") do %>
+        <% if f.object.authentication_mode.ip_address? %>
+          <%= f.attribute :inbound_source_ips_formatted, label: "Source IP addresses" %>
+        <% end %>
+
+        <% if f.object.inbound_country.present? %>
+          <%= f.attribute :default_country_code do %>
+            <%= "#{f.object.inbound_country.iso_short_name} (#{f.object.inbound_country.country_code})" %>
+          <% end %>
+        <% else %>
+          <%= f.attribute :default_country_code, value: nil %>
+        <% end %>
+      <% end %>
+
+      <%= page_section("Outbound Dialing") do %>
+        <% if f.object.outbound_host.present? %>
+          <%= f.attribute :outbound_host, label: "Host" %>
+        <% end %>
+
+        <%= f.attribute :outbound_route_prefixes, label: "Route prefixes", value: f.object.outbound_route_prefixes_formatted %>
+        <%= f.attribute :outbound_example_dial_string, label: "Dial string format" do %>
+          <code>
+            <%= f.object.outbound_example_dial_string %>
+          </code>
+        <% end %>
+      <% end %>
+
+      <%= page_section("Caller ID Configuration") do %>
+        <%= f.attribute(
+          :caller_id_behavior,
+          label: "Behavior",
+          value: f.object.caller_id_behavior.text,
+          content_html: {
+            id: "caller-id-behavior"
+          }
+        ) %>
+
+        <%= f.attribute(
+          :caller_id,
+          value: f.object.caller_id,
+          content_html: {
+            id: "caller-id"
+          }
+        ) %>
+      <% end %>
+    <% end %>
+  <% end %>
+</div>

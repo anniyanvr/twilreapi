@@ -1,15 +1,21 @@
-require: rubocop-rspec
+plugins:
+  - "rubocop-rspec"
+  - "rubocop-capybara"
+
+require:
+  - "anycable/rails/compatibility/rubocop"
+
+# Omakase Ruby styling for Rails
+inherit_gem:
+  rubocop-rails-omakase: rubocop.yml
+
+AllCops:
+  NewCops: enable
+
+Lint:
+  Enabled: true
 
 Style/FrozenStringLiteralComment:
-  Enabled: false
-
-Style/StringLiterals:
-  EnforcedStyle: double_quotes
-
-Layout/LineLength:
-  Max: 100
-
-Style/Documentation:
   Enabled: false
 
 RSpec/DescribedClass:
@@ -20,3 +26,12 @@ RSpec/ExampleLength:
 
 RSpec/MultipleExpectations:
   Enabled: false
+
+AnyCable/InstanceVars:
+  Enabled: true
+
+AnyCable/StreamFrom:
+  Enabled: true
+
+AnyCable/PeriodicalTimers:
+  Enabled: true

@@ -1,38 +1,149 @@
 <div class="card-body">
   <%= simple_form_for([:dashboard, resource], wrapper: :input_group) do |f| %>
-    <div class="row">
-      <div class="col-sm-6">
-        <%= f.input :name, maxlength: 128, hint: "A friendly name for the account", disabled: policy(resource).customer_managed? %>
-      </div>
-    </div>
+    <%= page_sections_container do %>
 
-    <div class="row">
-      <div class="col-sm-6">
-        <%= f.input :owner_name, hint: "Specify an owner to make the account customer managed. The owner will receive an invitation email. This cannot be undone.", disabled: policy(resource).customer_managed? %>
-      </div>
+      <%= page_section("General") do %>
+        <div class="row">
+          <div class="col-sm-6">
+            <%= f.input(
+              :name,
+              maxlength: 128,
+              hint: "A friendly name for the account",
+              disabled: policy(resource).customer_managed?
+            ) %>
+          </div>
+        </div>
+      <% end %>
 
-      <div class="col-sm-6">
-        <%= f.input :owner_email, disabled: policy(resource).customer_managed? %>
-      </div>
-    </div>
+      <%= page_section("Owner") do %>
+        <div class="row">
+          <div class="col-sm-6">
+            <%= f.input :owner_name, hint: "Specify an owner to make the account customer managed. The owner will receive an invitation email. This cannot be undone.", disabled: policy(resource).customer_managed? %>
+          </div>
 
-    <div class="row">
-      <div class="col-sm-6">
-         <%= f.input :outbound_sip_trunk_id,
-                      collection: [],
-                      hint: "Optionally specify an outbound SIP trunk which will be used by this account for outbound calls. If left blank outbound calls from this account will be routed automatically.",
-                      selected: resource.outbound_sip_trunk_id,
-                      prompt: "",
-                      input_html: { data: { behavior: "select2-input", data: resource.outbound_sip_trunk_options_for_select } } %>
-      </div>
-    </div>
+          <div class="col-sm-6">
+            <%= f.input :owner_email, disabled: policy(resource).customer_managed? %>
+          </div>
+        </div>
+      <% end %>
 
-    <div class="row">
-      <div class="col-sm-6">
-        <%= f.input :enabled, as: :boolean, wrapper: :custom_boolean_switch, hint: "Accounts which are disabled are blocked from accessing the API" %>
-      </div>
-    </div>
+      <%= page_section("Voice") do %>
+        <div class="row">
+          <div class="col-sm-6">
+            <%= f.input(
+              :sip_trunk_id,
+              collection: resource.sip_trunk_options_for_select,
+              hint: "Optionally specify a SIP trunk which will be used by this account for outbound calls. If left blank outbound calls from this account will be routed automatically.",
+              include_blank: true,
+              input_html: {
+                data: {
+                  controller: "enhanced-select",
+                  enhanced_select_options: {
+                    removeItemButton: true
+                  }
+                }
+              }
+            ) %>
 
-    <%= f.button :submit %>
+          </div>
+
+          <div class="col-sm-6">
+            <%= f.input :calls_per_second, as: :numeric, hint: "Restrict the number of calls per second for the account" %>
+          </div>
+        </div>
+      <% end %>
+
+      <%= page_section("Text to Speech") do %>
+        <%=
+          render(
+            "dashboard/account_settings/default_tts_configuration_fields",
+            f: f,
+            disabled: policy(resource).customer_managed?
+          )
+        %>
+      <% end %>
+
+      <%= page_section(
+        "Billing",
+        data: {
+          controller: "tariff-package-selection toggle-form-section",
+          tariff_package_selection_plans_value: f.object.tariff_plans_by_category.to_json
+        }
+      ) do %>
+        <div class="row">
+          <div class="col-sm-6">
+            <%= f.input(
+              :billing_enabled,
+              as: :boolean,
+              wrapper: :boolean_switch,
+              input_html: {
+                data: {
+                  toggle_form_section_target: "enabledInput",
+                  action: "toggle-form-section#toggleEnabled"
+                }
+              }
+            ) %>
+          </div>
+        </div>
+
+        <%= tag.div(
+          data: {
+            toggle_form_section_target: "container"
+          }
+        ) do %>
+          <div class="row">
+            <div class="col-sm-6">
+              <%= f.input :billing_mode, include_blank: false, input_html: { data: { controller: "enhanced-select" } } %>
+            </div>
+
+            <div class="col-sm-6">
+              <% if f.object.new_record? %>
+                <%= f.input(
+                  :tariff_package_id,
+                  collection: f.object.tariff_packages_options_for_select,
+                  include_blank: "Configure manually",
+                  input_html: {
+                    data: {
+                      controller: "enhanced-select",
+                      enhanced_select_options: {
+                        removeItemButton: true
+                      },
+                      tariff_package_selection_target: "tariffPackageInput",
+                      action: "change->tariff-package-selection#changeTariffPackage"
+                    }
+                  }
+                ) %>
+              <% end %>
+            </div>
+          </div>
+
+          <%= render(
+            "shared/tariff_plan_assignment_form",
+            form: f,
+            collection: f.object.tariff_plan_subscriptions,
+            collection_method: :tariff_plan_subscriptions
+          ) %>
+        <% end  %>
+      <% end %>
+
+      <%= page_section("Danger Zone", class: "border-danger") do %>
+        <div class="row">
+          <div class="col-sm-6">
+            <%= f.input(
+              :enabled,
+              as: :boolean,
+              wrapper: :boolean_switch,
+              hint: "Accounts which are disabled are blocked from accessing the API"
+            ) %>
+          </div>
+        </div>
+      <% end %>
+
+      <div class="row">
+        <div class="col-6">
+          <%= f.button :submit %>
+        </div>
+      </div>
+    <% end %>
   <% end %>
 </div>
